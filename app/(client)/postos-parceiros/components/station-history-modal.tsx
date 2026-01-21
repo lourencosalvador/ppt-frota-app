@@ -65,7 +65,7 @@ export default function StationHistoryModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[980px] p-0">
+      <DialogContent className="max-w-[980px] p-0 lg:left-[calc(50%+132px)]">
         <DialogHeader className="sr-only">
           <DialogTitle>
             {station?.name ? `Histórico - ${station.name}` : "Histórico do Posto"}

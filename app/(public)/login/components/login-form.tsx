@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
 import {
@@ -16,26 +19,33 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Insere um email válido."),
+  password: z.string().min(6, "A palavra-passe deve ter no mínimo 6 caracteres."),
+});
+
+type LoginValues = z.infer<typeof loginSchema>;
+
 export default function LoginForm() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const canSubmit = useMemo(() => {
-    return email.trim().length > 0 && password.length > 0 && !isLoading;
-  }, [email, password, isLoading]);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+  } = useForm<LoginValues>({
+    resolver: zodResolver(loginSchema),
+    mode: "onChange",
+    defaultValues: { email: "", password: "" },
+  });
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function onSubmit(values: LoginValues) {
     if (isLoading) return;
 
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || !password) {
-      toast.error("Preenche o email e a palavra-passe.");
-      return;
-    }
+    const normalizedEmail = values.email;
+    const password = values.password;
 
     setIsLoading(true);
     await sleep(5000);
@@ -61,7 +71,7 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-10 w-full max-w-2xl space-y-5">
+    <form onSubmit={handleSubmit(onSubmit)} className="mt-10 w-full max-w-2xl space-y-5">
       <div className="space-y-2">
         <label htmlFor="email" className="text-sm font-semibold text-zinc-700">
           Email
@@ -70,11 +80,19 @@ export default function LoginForm() {
           id="email"
           type="email"
           autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          {...register("email")}
           placeholder="ex: nome@empresa.com"
-          className="h-12 w-full rounded-2xl border border-zinc-200 bg-white px-4 text-base outline-none transition placeholder:text-zinc-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/15"
+          aria-invalid={Boolean(errors.email)}
+          className={[
+            "h-12 w-full rounded-2xl border bg-white px-4 text-base outline-none transition placeholder:text-zinc-400 focus:ring-4",
+            errors.email
+              ? "border-red-300 focus:border-red-400 focus:ring-red-500/15"
+              : "border-zinc-200 focus:border-emerald-500 focus:ring-emerald-500/15",
+          ].join(" ")}
         />
+        {errors.email?.message ? (
+          <div className="text-xs font-semibold text-red-600">{errors.email.message}</div>
+        ) : null}
       </div>
 
       <div className="space-y-2">
@@ -86,10 +104,15 @@ export default function LoginForm() {
             id="password"
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            {...register("password")}
             placeholder="••••••••"
-            className="h-12 w-full rounded-2xl border border-zinc-200 bg-white px-4 pr-24 text-base outline-none transition placeholder:text-zinc-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/15"
+            aria-invalid={Boolean(errors.password)}
+            className={[
+              "h-12 w-full rounded-2xl border bg-white px-4 pr-24 text-base outline-none transition placeholder:text-zinc-400 focus:ring-4",
+              errors.password
+                ? "border-red-300 focus:border-red-400 focus:ring-red-500/15"
+                : "border-zinc-200 focus:border-emerald-500 focus:ring-emerald-500/15",
+            ].join(" ")}
           />
           <button
             type="button"
@@ -99,6 +122,9 @@ export default function LoginForm() {
             {showPassword ? "Ocultar" : "Mostrar"}
           </button>
         </div>
+        {errors.password?.message ? (
+          <div className="text-xs font-semibold text-red-600">{errors.password.message}</div>
+        ) : null}
       </div>
 
       <div className="flex items-center justify-between pt-2">
@@ -111,7 +137,7 @@ export default function LoginForm() {
 
         <button
           type="submit"
-          disabled={!canSubmit}
+          disabled={!isValid || isLoading}
           className="inline-flex h-11 items-center justify-center rounded-2xl bg-emerald-600 px-9 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isLoading ? (

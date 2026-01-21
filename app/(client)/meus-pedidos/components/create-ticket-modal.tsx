@@ -1,9 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Save, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { useForm, Controller } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 
 import type {
   Ticket,
@@ -59,6 +62,16 @@ function nextTicketCode(existing: Ticket[]) {
   return `TKT-${year}-${String(next).padStart(3, "0")}`;
 }
 
+const ticketSchema = z.object({
+  requestType: z.enum(["PEDIDO_CARTAO", "ABASTECIMENTO_MANUAL", "SUPORTE", "CARREGAMENTO", "OUTRO"]),
+  subject: z.string().trim().min(1, "O Assunto é obrigatório."),
+  priority: z.enum(["Urgente", "Alta", "Normal", "Baixa"]),
+  matricula: z.string(),
+  description: z.string().trim().min(1, "A Descrição Detalhada é obrigatória."),
+});
+
+type TicketFormValues = z.infer<typeof ticketSchema>;
+
 export default function CreateTicketModal({
   open,
   onOpenChange,
@@ -76,15 +89,26 @@ export default function CreateTicketModal({
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [requestType, setRequestType] = useState("PEDIDO_CARTAO");
-  const [subject, setSubject] = useState("");
-  const [priority, setPriority] = useState<TicketPriority>("Normal");
-  const [matricula, setMatricula] = useState("");
-  const [description, setDescription] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [fileIsImage, setFileIsImage] = useState(false);
+
+  const {
+    control,
+    handleSubmit,
+    reset: resetForm,
+    formState: { errors, isValid },
+  } = useForm<TicketFormValues>({
+    resolver: zodResolver(ticketSchema),
+    mode: "onChange",
+    defaultValues: {
+      requestType: "PEDIDO_CARTAO",
+      subject: "",
+      priority: "Normal",
+      matricula: "",
+      description: "",
+    },
+  });
 
   useEffect(() => {
     return () => {
@@ -92,46 +116,41 @@ export default function CreateTicketModal({
     };
   }, [filePreviewUrl]);
 
-  const canSubmit = useMemo(() => {
-    return subject.trim().length > 3 && description.trim().length > 5 && !isSubmitting;
-  }, [subject, description, isSubmitting]);
-
   function reset() {
-    setRequestType("PEDIDO_CARTAO");
-    setSubject("");
-    setPriority("Normal");
-    setMatricula("");
-    setDescription("");
+    resetForm({
+      requestType: "PEDIDO_CARTAO",
+      subject: "",
+      priority: "Normal",
+      matricula: "",
+      description: "",
+    });
     setFileName(null);
     if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
     setFilePreviewUrl(null);
     setFileIsImage(false);
   }
 
-  async function submit() {
-    if (!canSubmit) {
-      toast.error("Preenche o Assunto e a Descrição.");
-      return;
-    }
-
+  async function submit(values: TicketFormValues) {
+    if (isSubmitting) return;
     setIsSubmitting(true);
     await sleep(1800);
 
-    const status: TicketStatus = requestType === "PEDIDO_CARTAO" ? "EM ANALISE" : "ABERTO";
+    const status: TicketStatus = values.requestType === "PEDIDO_CARTAO" ? "EM ANALISE" : "ABERTO";
     const code = nextTicketCode(existingTickets);
 
-    const fullSubject = matricula.trim()
-      ? `${subject.trim()} (${matricula.trim().toUpperCase()})`
-      : subject.trim();
+    const matriculaValue = (values.matricula ?? "").trim();
+    const fullSubject = matriculaValue
+      ? `${values.subject.trim()} (${matriculaValue.toUpperCase()})`
+      : values.subject.trim();
 
     const requestTypeLabel =
-      requestType === "PEDIDO_CARTAO"
+      values.requestType === "PEDIDO_CARTAO"
         ? "Pedido de Cartão Frota+"
-        : requestType === "ABASTECIMENTO_MANUAL"
+        : values.requestType === "ABASTECIMENTO_MANUAL"
           ? "Abastecimento Manual"
-          : requestType === "SUPORTE"
+          : values.requestType === "SUPORTE"
             ? "Suporte"
-            : requestType === "CARREGAMENTO"
+            : values.requestType === "CARREGAMENTO"
               ? "Carregamento"
               : "Outro";
 
@@ -139,14 +158,14 @@ export default function CreateTicketModal({
       id: crypto.randomUUID(),
       code,
       subject: fullSubject,
-      type: toTicketType(requestType),
+      type: toTicketType(values.requestType),
       requester: requesterName,
       requesterRole,
-      priority,
+      priority: values.priority as TicketPriority,
       status,
       createdAt: new Date().toISOString().slice(0, 10),
-      description: description.trim(),
-      matricula: matricula.trim() ? matricula.trim().toUpperCase() : undefined,
+      description: values.description.trim(),
+      matricula: matriculaValue ? matriculaValue.toUpperCase() : undefined,
       attachmentName: fileName ?? undefined,
       requestTypeLabel,
     };
@@ -172,57 +191,86 @@ export default function CreateTicketModal({
           <DialogTitle>Novo Ticket / Solicitação</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5 px-6 py-5">
+        <form onSubmit={handleSubmit(submit)} className="space-y-5 px-6 py-5">
           <div className="space-y-2">
             <Label>Tipo de Solicitação</Label>
-            <Select value={requestType} onValueChange={setRequestType}>
-              <SelectTrigger className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 focus:ring-white/10">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="PEDIDO_CARTAO">Pedido de Cartão Frota+</SelectItem>
-                <SelectItem value="ABASTECIMENTO_MANUAL">Abastecimento Manual</SelectItem>
-                <SelectItem value="SUPORTE">Suporte</SelectItem>
-                <SelectItem value="CARREGAMENTO">Carregamento</SelectItem>
-                <SelectItem value="OUTRO">Outro</SelectItem>
-              </SelectContent>
-            </Select>
+            <Controller
+              control={control}
+              name="requestType"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 focus:ring-white/10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PEDIDO_CARTAO">Pedido de Cartão Frota+</SelectItem>
+                    <SelectItem value="ABASTECIMENTO_MANUAL">Abastecimento Manual</SelectItem>
+                    <SelectItem value="SUPORTE">Suporte</SelectItem>
+                    <SelectItem value="CARREGAMENTO">Carregamento</SelectItem>
+                    <SelectItem value="OUTRO">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </div>
 
           <div className="space-y-2">
             <Label>Assunto</Label>
-            <Input
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Ex: Novo cartão para cliente X"
-              className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 placeholder:text-zinc-400 focus-visible:ring-white/10"
+            <Controller
+              control={control}
+              name="subject"
+              render={({ field }) => (
+                <Input
+                  {...field}
+                  placeholder="Ex: Novo cartão para cliente X"
+                  className={[
+                    "h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 placeholder:text-zinc-400 focus-visible:ring-white/10",
+                    errors.subject ? "border-red-500/60 focus-visible:ring-red-500/20" : "",
+                  ].join(" ")}
+                />
+              )}
             />
+            {errors.subject?.message ? (
+              <div className="text-xs font-semibold text-red-500">{errors.subject.message}</div>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Prioridade</Label>
-              <Select value={priority} onValueChange={(v) => setPriority(v as TicketPriority)}>
-                <SelectTrigger className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 focus:ring-white/10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Urgente">Urgente</SelectItem>
-                  <SelectItem value="Alta">Alta</SelectItem>
-                  <SelectItem value="Normal">Normal</SelectItem>
-                  <SelectItem value="Baixa">Baixa</SelectItem>
-                </SelectContent>
-              </Select>
+              <Controller
+                control={control}
+                name="priority"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 focus:ring-white/10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Urgente">Urgente</SelectItem>
+                      <SelectItem value="Alta">Alta</SelectItem>
+                      <SelectItem value="Normal">Normal</SelectItem>
+                      <SelectItem value="Baixa">Baixa</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
 
             <div className="space-y-2">
               <Label>Matricula (Op)</Label>
-              <Input
-                value={matricula}
-                onChange={(e) => setMatricula(formatMatricula(e.target.value))}
-                placeholder="AA-00-BB"
-                className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 placeholder:text-zinc-400 focus-visible:ring-white/10"
-                inputMode="text"
+              <Controller
+                control={control}
+                name="matricula"
+                render={({ field }) => (
+                  <Input
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(formatMatricula(e.target.value))}
+                    placeholder="AA-00-BB"
+                    className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 placeholder:text-zinc-400 focus-visible:ring-white/10"
+                    inputMode="text"
+                  />
+                )}
               />
             </div>
           </div>
@@ -287,14 +335,25 @@ export default function CreateTicketModal({
 
           <div className="space-y-2">
             <Label>Descrição Detalhada</Label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Descreva a necessidade..."
-              className="min-h-[140px] rounded-xl bg-zinc-800 text-white border-zinc-700 placeholder:text-zinc-400 focus-visible:ring-white/10"
+            <Controller
+              control={control}
+              name="description"
+              render={({ field }) => (
+                <Textarea
+                  {...field}
+                  placeholder="Descreva a necessidade..."
+                  className={[
+                    "min-h-[140px] rounded-xl bg-zinc-800 text-white border-zinc-700 placeholder:text-zinc-400 focus-visible:ring-white/10",
+                    errors.description ? "border-red-500/60 focus-visible:ring-red-500/20" : "",
+                  ].join(" ")}
+                />
+              )}
             />
+            {errors.description?.message ? (
+              <div className="text-xs font-semibold text-red-500">{errors.description.message}</div>
+            ) : null}
           </div>
-        </div>
+        </form>
 
         <DialogFooter>
           <Button
@@ -308,10 +367,10 @@ export default function CreateTicketModal({
           </Button>
 
           <Button
-            type="button"
-            onClick={submit}
+            type="submit"
+            onClick={handleSubmit(submit)}
             className="h-12 w-[48%] rounded-xl bg-emerald-600 font-bold hover:bg-emerald-700"
-            disabled={!canSubmit}
+            disabled={!isValid || isSubmitting}
           >
             {isSubmitting ? (
               <span className="inline-flex items-center gap-2">
