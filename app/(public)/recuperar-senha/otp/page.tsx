@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import OtpClient from "@/app/(public)/recuperar-senha/otp/otp-client";
 
 export const metadata: Metadata = {
@@ -6,6 +7,10 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  return <OtpClient />;
+  return (
+    <Suspense fallback={null}>
+      <OtpClient />
+    </Suspense>
+  );
 }
 

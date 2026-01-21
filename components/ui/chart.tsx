@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import * as RechartsPrimitive from "recharts"
+import type { TooltipContentProps } from "recharts"
 
 import { cn } from "@/lib/utils"
 
@@ -41,12 +42,14 @@ ChartContainer.displayName = "Chart"
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
+type ChartTooltipContentProps = Partial<TooltipContentProps<any, any>> & {
+  hideLabel?: boolean
+  className?: string
+}
+
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<typeof RechartsPrimitive.Tooltip> & {
-    hideLabel?: boolean
-    className?: string
-  }
+  ChartTooltipContentProps
 >(({ active, payload, className }, ref) => {
   if (!active || !payload?.length) {
     return null
