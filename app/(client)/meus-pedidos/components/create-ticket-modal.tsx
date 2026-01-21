@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Save, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -28,7 +29,6 @@ function sleep(ms: number) {
 }
 
 function formatMatricula(raw: string) {
-  // AA-09-60 (6 caracteres úteis; insere '-' a cada 2)
   const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
   const parts = cleaned.match(/.{1,2}/g) ?? [];
   return parts.join("-");
@@ -194,7 +194,7 @@ export default function CreateTicketModal({
             <Input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="Ex: Novo cartão para motorista X"
+              placeholder="Ex: Novo cartão para cliente X"
               className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 placeholder:text-zinc-400 focus-visible:ring-white/10"
             />
           </div>
@@ -236,11 +236,13 @@ export default function CreateTicketModal({
             >
               <div className="flex w-full flex-col items-center">
                 {fileIsImage && filePreviewUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <Image
                     src={filePreviewUrl}
                     alt="Pré-visualização"
+                    width={96}
+                    height={96}
                     className="h-24 w-24 rounded-2xl object-cover shadow-sm"
+                    unoptimized
                   />
                 ) : (
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 text-zinc-600">

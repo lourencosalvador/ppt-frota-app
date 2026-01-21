@@ -33,7 +33,6 @@ export default function PostoCard({
 }) {
   return (
     <div className="rounded-2xl border border-emerald-200/60 bg-white p-5 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
-      {/* Top row */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
@@ -55,7 +54,6 @@ export default function PostoCard({
         </div>
       </div>
 
-      {/* Title */}
       <div className="mt-4 text-lg font-extrabold text-zinc-900">
         {station.name}
       </div>

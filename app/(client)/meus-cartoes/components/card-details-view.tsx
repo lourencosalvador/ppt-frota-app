@@ -50,7 +50,6 @@ export default function CardDetailsView({
       </button>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_520px]">
-        {/* Left column */}
         <div>
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-extrabold text-zinc-900">
@@ -73,7 +72,6 @@ export default function CardDetailsView({
             </div>
           </div>
 
-          {/* Card visual */}
           <div
             className={[
               "mt-4 rounded-2xl p-6 text-white shadow-[0_10px_40px_rgba(0,0,0,0.18)]",
@@ -119,7 +117,6 @@ export default function CardDetailsView({
             </div>
           </div>
 
-          {/* Balance + actions */}
           <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-[1fr_180px]">
             <div className="rounded-2xl border border-zinc-100/60 bg-white p-5 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
               <div className="text-xs font-semibold text-zinc-500">
@@ -165,7 +162,6 @@ export default function CardDetailsView({
             </div>
           </div>
 
-          {/* Min limit */}
           <div className="mt-4 rounded-2xl border border-zinc-100/60 bg-white p-5 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
             <div className="flex items-center justify-between">
               <div>
@@ -188,7 +184,6 @@ export default function CardDetailsView({
           </div>
         </div>
 
-        {/* Right column */}
         <div className="rounded-2xl border border-zinc-100/60 bg-white shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
           <div className="flex items-start justify-between border-b border-zinc-100 px-6 py-5">
             <div>

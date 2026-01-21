@@ -33,7 +33,6 @@ export default function CardTile({
         isBlocked ? "opacity-70" : "",
       ].join(" ")}
     >
-      {/* Top row */}
       <div className="flex items-start justify-between">
         <div
           className={[
@@ -53,20 +52,17 @@ export default function CardTile({
         </div>
       </div>
 
-      {/* Card number */}
       <div className="mt-6 flex items-center gap-2 font-mono text-lg font-bold tracking-widest text-zinc-800">
         <span>****</span>
         <span>{card.last4}</span>
       </div>
 
-      {/* Owner */}
       <div className="mt-1 text-[11px] font-bold uppercase tracking-widest text-zinc-400">
         {card.owner}
       </div>
 
       <div className="my-4 h-px bg-zinc-100" />
 
-      {/* Bottom row */}
       <div className="flex items-end justify-between gap-4">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">

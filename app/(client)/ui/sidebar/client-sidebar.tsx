@@ -15,6 +15,7 @@ import type { DemoSession } from "@/app/lib/demo-auth";
 import { SESSION_STORAGE_KEY } from "@/app/lib/demo-auth";
 import NavItem from "@/app/(client)/ui/sidebar/nav-item";
 import { Button } from "@/components/ui/button";
+import perfilImg from "@/app/assets/image/perfil.png";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).slice(0, 2);
@@ -45,7 +46,7 @@ export default function ClientSidebar({ session }: { session: DemoSession }) {
 
       <div className="mt-8 flex-1 px-4">
         <div className="px-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-          Menu Motorista
+          Menu Cliente
         </div>
 
         <nav className="mt-3 space-y-1">
@@ -59,15 +60,24 @@ export default function ClientSidebar({ session }: { session: DemoSession }) {
       <div className="border-t border-white/10 p-4">
         <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/5 px-3 py-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600/20 text-sm font-bold text-emerald-200">
-              {initials(session.name || session.email)}
+            <div className="relative h-9 w-9 overflow-hidden rounded-full border border-white/10 bg-emerald-600/20">
+              <Image
+                src={perfilImg}
+                alt="Foto de perfil"
+                fill
+                sizes="36px"
+                className="object-cover"
+              />
+              <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm font-bold text-emerald-200 opacity-0">
+                {initials(session.name || session.email)}
+              </span>
             </div>
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-white">
                 {session.name}
               </div>
               <div className="truncate text-[11px] font-semibold text-zinc-400">
-                MOTORISTA
+                CLIENTE
               </div>
             </div>
           </div>

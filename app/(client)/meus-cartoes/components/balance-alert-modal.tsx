@@ -60,7 +60,6 @@ export default function BalanceAlertModal({
       }}
     >
       <DialogContent className="max-w-[520px] overflow-hidden p-0">
-        {/* Top (dark) */}
         <div className="relative bg-gradient-to-b from-[#0B1220] to-[#0E2236] px-6 pb-8 pt-10 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-white">
             <Bell className="h-8 w-8" />
@@ -75,7 +74,6 @@ export default function BalanceAlertModal({
           </p>
         </div>
 
-        {/* Body */}
         <div className="space-y-5 bg-white px-6 py-8">
           <div className="text-center text-[12px] font-extrabold uppercase tracking-[0.22em] text-zinc-400">
             LIMITE DESEJADO (KZ)

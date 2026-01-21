@@ -54,7 +54,6 @@ export default function StationHistoryModal({
   const filtered = useMemo(() => {
     if (tab === "TODOS") return records;
     if (tab === "REGULARIZACAO") return records.filter((r) => r.status === "EM REGULARIZAÇÃO");
-    // PENDENTES / PEDIDOS: consider ABERTO + EM REGULARIZAÇÃO
     return records.filter((r) => r.status === "ABERTO" || r.status === "EM REGULARIZAÇÃO");
   }, [records, tab]);
 
@@ -67,7 +66,6 @@ export default function StationHistoryModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[980px] p-0">
-        {/* A11y: Radix requires a DialogTitle inside DialogContent */}
         <DialogHeader className="sr-only">
           <DialogTitle>
             {station?.name ? `Histórico - ${station.name}` : "Histórico do Posto"}
@@ -96,7 +94,6 @@ export default function StationHistoryModal({
         </div>
 
         <div className="px-6 py-6">
-          {/* Stats */}
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-5">
               <div className="text-[11px] font-extrabold uppercase tracking-widest text-blue-700">
@@ -127,7 +124,6 @@ export default function StationHistoryModal({
             </div>
           </div>
 
-          {/* Tabs */}
           <div className="mt-6 flex flex-wrap gap-3">
             <button
               type="button"
@@ -152,7 +148,6 @@ export default function StationHistoryModal({
             </button>
           </div>
 
-          {/* Table */}
           <div className="mt-5 overflow-hidden rounded-2xl border border-zinc-100/60">
             <Table>
               <TableHeader>

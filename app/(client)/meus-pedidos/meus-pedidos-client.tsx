@@ -54,8 +54,8 @@ export default function MeusPedidosClient() {
       <CreateTicketModal
         open={isCreateOpen}
         onOpenChange={setIsCreateOpen}
-        requesterName="João Motorista"
-        requesterRole="Motorista"
+        requesterName="Lorrys Cliente"
+        requesterRole="Cliente"
         existingTickets={tickets}
         onCreate={(t) => {
           setTickets((prev) => [t, ...prev]);
@@ -75,7 +75,6 @@ export default function MeusPedidosClient() {
       />
 
       <div className="w-full overflow-hidden rounded-2xl border border-zinc-100/50 bg-white shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
-        {/* Header (search + filters) */}
         <div className="flex flex-col gap-4 border-b border-zinc-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full max-w-md">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
@@ -113,7 +112,6 @@ export default function MeusPedidosClient() {
           </div>
         </div>
 
-        {/* Table */}
         <TicketsTable
           tickets={filteredTickets}
           onViewDetails={(t) => {
@@ -126,7 +124,6 @@ export default function MeusPedidosClient() {
           }}
         />
 
-        {/* Footer (pagination) */}
         <div className="flex items-center justify-between border-t border-zinc-100 bg-white px-6 py-4">
           <div className="text-sm font-medium text-zinc-500">
             Mostrando {filteredTickets.length} resultado

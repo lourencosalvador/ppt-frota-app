@@ -129,7 +129,6 @@ export default function TopupModal({
                 ].join(" ")}
               >
                 <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                  {/* ícone estilo banco */}
                   <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
                     <path d="M12 2 2 7v2h20V7L12 2zm8 9H4v9h16v-9zM6 13h2v5H6v-5zm5 0h2v5h-2v-5zm5 0h2v5h-2v-5z" />
                   </svg>

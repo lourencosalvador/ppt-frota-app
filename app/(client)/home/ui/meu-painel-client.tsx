@@ -44,21 +44,17 @@ export default function MeuPainelClient() {
     } catch {}
   }, []);
 
-  const name = session?.name ?? "Motorista";
+  const name = session?.name ?? "Cliente";
   const today = useMemo(() => getTodayLabel(), []);
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-6">
-      {/* Top Section: Full Width */}
       <UserSummaryCard todayLabel={`${today}, 17 DE JANEIRO`} name={name} />
-      
+
       <StatCards cards={statCards} />
 
-      {/* Bottom Section: Two columns layout */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-        {/* Left Column */}
         <div className="space-y-6">
-          {/* Header */}
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
             <span className="text-amber-500 text-sm">⚡</span> Acesso Rápido
           </div>
@@ -68,7 +64,6 @@ export default function MeuPainelClient() {
           <ActivityCard data={chartData} />
         </div>
 
-        {/* Right Column */}
         <div className="space-y-4">
           <div className="flex justify-end">
             <div className="text-[13px] font-bold text-zinc-900">KZ 85.00</div>

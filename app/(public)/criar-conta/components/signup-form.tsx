@@ -50,7 +50,7 @@ export default function SignupForm() {
           type="text"
           value={nome}
           onChange={(e) => setNome(e.target.value)}
-          placeholder="Ex: João Manuel"
+          placeholder="Ex: Lorrys Manuel"
           className="h-12 w-full rounded-2xl border border-zinc-200 bg-white px-4 text-base outline-none transition placeholder:text-zinc-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/15"
         />
       </div>

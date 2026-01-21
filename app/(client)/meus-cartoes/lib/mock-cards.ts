@@ -21,7 +21,7 @@ export const mockCards: FrotaCard[] = [
   {
     id: "c1",
     last4: "4829",
-    owner: "João Motorista",
+    owner: "Lorrys Cliente",
     balanceKz: 120_500,
     validThru: "12/26",
     limitKz: 500_000,

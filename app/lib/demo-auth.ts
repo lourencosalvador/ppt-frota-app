@@ -4,13 +4,13 @@ export const DEMO_USERS = [
   {
     email: "lourencocardoso007@gmail.com",
     password: "lorrys12345",
-    name: "João Motorista",
+    name: "Lorrys Cliente",
     role: "client" as const,
   },
   {
     email: "paulosanguli@gmail.com",
     password: "sagunli1234",
-    name: "Paulo Motorista",
+    name: "Paulo Cliente",
     role: "client" as const,
   },
 ] as const;
