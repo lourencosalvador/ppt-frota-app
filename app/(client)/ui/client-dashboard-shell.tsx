@@ -23,6 +23,22 @@ export default function ClientDashboardShell({
 }) {
   const pathname = usePathname();
   const title = TITLE_BY_PATH[pathname] ?? "Meu Painel";
+  const notifications = [
+    {
+      id: "n1",
+      title: "Bem-vindo, Lorrys",
+      description: "A tua conta está pronta para usar.",
+      timeLabel: "AGORA",
+      unread: true,
+    },
+    {
+      id: "n2",
+      title: "Pedido em análise",
+      description: "Estamos a analisar o teu pedido mais recente.",
+      timeLabel: "HOJE",
+      unread: false,
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900">
@@ -30,7 +46,7 @@ export default function ClientDashboardShell({
         <ClientSidebar session={session} />
 
         <div className="flex min-h-screen flex-1 flex-col">
-          <ClientTopbar title={title} />
+          <ClientTopbar title={title} notifications={notifications} />
           <main className="flex-1 px-8 py-8">{children}</main>
         </div>
       </div>
