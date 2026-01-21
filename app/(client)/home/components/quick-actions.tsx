@@ -3,6 +3,7 @@
 import type { LucideIcon } from "lucide-react";
 
 type Action = {
+  id: string;
   icon: LucideIcon;
   title: string;
   subtitle: string;
@@ -42,7 +43,13 @@ function styles(kind: Action["kind"]) {
   }
 }
 
-export default function QuickActions({ actions }: { actions: Action[] }) {
+export default function QuickActions({
+  actions,
+  onAction,
+}: {
+  actions: Action[];
+  onAction?: (action: Action) => void;
+}) {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {actions.slice(0, 4).map((a, idx) => {
@@ -50,8 +57,10 @@ export default function QuickActions({ actions }: { actions: Action[] }) {
           const s = styles(a.kind);
           return (
             <button
-              key={idx}
+              key={a.id ?? idx}
               className={`flex flex-col items-center justify-center rounded-2xl border p-5 transition-all hover:scale-[1.01] active:scale-[0.99] ${s.wrap}`}
+              type="button"
+              onClick={() => onAction?.(a)}
             >
               <div
                 className={`flex h-12 w-12 items-center justify-center rounded-2xl ${s.iconWrap}`}

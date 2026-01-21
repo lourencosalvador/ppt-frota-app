@@ -58,10 +58,10 @@ export const statCards: StatCard[] = [
 ];
 
 export const quickActions = [
-  { icon: Fuel, title: "Novo", subtitle: "Abastecimento", kind: "success" as const },
-  { icon: CreditCard, title: "Ver", subtitle: "Cartões", kind: "info" as const },
-  { icon: MapPin, title: "Localizar", subtitle: "Postos", kind: "violet" as const },
-  { icon: Bot, title: "Suporte IA", subtitle: "Urgente", kind: "danger" as const },
+  { id: "new_fuel", icon: Fuel, title: "Novo", subtitle: "Abastecimento", kind: "success" as const },
+  { id: "cards", icon: CreditCard, title: "Ver", subtitle: "Cartões", kind: "info" as const },
+  { id: "stations", icon: MapPin, title: "Localizar", subtitle: "Postos", kind: "violet" as const },
+  { id: "support_ai", icon: Bot, title: "Suporte IA", subtitle: "Urgente", kind: "danger" as const },
 ];
 
 export const historyItems: HistoryItem[] = [

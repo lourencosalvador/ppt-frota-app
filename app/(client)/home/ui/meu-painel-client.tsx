@@ -7,6 +7,7 @@ import ActivityCard from "@/app/(client)/home/components/activity-card";
 import HistoryPanel from "@/app/(client)/home/components/history-panel";
 import QuickActions from "@/app/(client)/home/components/quick-actions";
 import StatCards from "@/app/(client)/home/components/stat-cards";
+import SupportAIWidget from "@/app/(client)/home/components/support-ai-widget";
 import UserSummaryCard from "@/app/(client)/home/components/user-summary-card";
 import {
   historyItems,
@@ -33,6 +34,7 @@ function getTodayLabel() {
 
 export default function MeuPainelClient() {
   const [session, setSession] = useState<DemoSession | null>(null);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -59,7 +61,12 @@ export default function MeuPainelClient() {
             <span className="text-amber-500 text-sm">⚡</span> Acesso Rápido
           </div>
 
-          <QuickActions actions={quickActions} />
+          <QuickActions
+            actions={quickActions}
+            onAction={(a) => {
+              if (a.id === "support_ai") setSupportOpen(true);
+            }}
+          />
 
           <ActivityCard data={chartData} />
         </div>
@@ -72,6 +79,8 @@ export default function MeuPainelClient() {
           <HistoryPanel items={historyItems} recentRequests={recentRequests} />
         </div>
       </div>
+
+      <SupportAIWidget open={supportOpen} onOpenChange={setSupportOpen} name={name} />
     </div>
   );
 }
