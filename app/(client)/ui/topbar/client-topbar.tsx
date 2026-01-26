@@ -26,20 +26,20 @@ export default function ClientTopbar({
 
         <Sheet>
           <SheetTrigger asChild>
-            <button
-              type="button"
-              className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl hover:bg-zinc-50"
-              aria-label="Notificações"
-            >
-              <Bell className="h-5 w-5 text-zinc-600" />
+        <button
+          type="button"
+          className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl hover:bg-zinc-50"
+          aria-label="Notificações"
+        >
+          <Bell className="h-5 w-5 text-zinc-600" />
               {unreadCount > 0 ? (
-                <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-red-500" />
+          <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-red-500" />
               ) : null}
-            </button>
+        </button>
           </SheetTrigger>
 
           <SheetContent side="right" className="w-[92vw] max-w-[420px] p-0">
-            <SheetHeader>
+            <SheetHeader className="pr-16">
               <div className="flex items-center justify-between gap-4">
                 <SheetTitle>Notificações</SheetTitle>
                 {unreadCount > 0 ? (

@@ -69,7 +69,7 @@ export default function ClientSidebar({ session }: { session: DemoSession }) {
                 className="object-cover"
               />
               <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm font-bold text-emerald-200 opacity-0">
-                {initials(session.name || session.email)}
+              {initials(session.name || session.email)}
               </span>
             </div>
             <div className="min-w-0">

@@ -22,7 +22,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      "flex cursor-default select-none items-center rounded-lg px-2 py-2 text-sm font-semibold outline-none focus:bg-zinc-50 data-[state=open]:bg-zinc-50",
+      "flex cursor-pointer select-none items-center rounded-lg px-2 py-2 text-sm font-semibold outline-none focus:bg-zinc-50 data-[state=open]:bg-zinc-50",
       inset && "pl-8",
       className,
     )}
@@ -76,7 +76,7 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-zinc-700 outline-none transition-colors focus:bg-zinc-50 data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      "relative flex cursor-pointer select-none items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-zinc-700 outline-none transition-colors focus:bg-zinc-50 data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       inset && "pl-8",
       className,
     )}
@@ -92,7 +92,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-lg py-2 pl-8 pr-2 text-sm font-semibold outline-none transition-colors focus:bg-zinc-50 data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      "relative flex cursor-pointer select-none items-center rounded-lg py-2 pl-8 pr-2 text-sm font-semibold outline-none transition-colors focus:bg-zinc-50 data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className,
     )}
     checked={checked}

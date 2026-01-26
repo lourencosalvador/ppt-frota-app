@@ -13,6 +13,18 @@ export const DEMO_USERS = [
     name: "Paulo Cliente",
     role: "client" as const,
   },
+  {
+    email: "gestor@frota.com",
+    password: "gestor123",
+    name: "Lorrys Gestor",
+    role: "admin" as const,
+  },
+  {
+    email: "suporte@frota.com",
+    password: "suporte123",
+    name: "Equipa Suporte",
+    role: "support" as const,
+  },
 ] as const;
 
 export const SESSION_STORAGE_KEY = "frota_plus_session";

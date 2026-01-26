@@ -52,7 +52,7 @@ export default function MeuPainelClient() {
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-6">
       <UserSummaryCard todayLabel={`${today}, 17 DE JANEIRO`} name={name} />
-
+      
       <StatCards cards={statCards} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">

@@ -199,17 +199,17 @@ export default function CreateTicketModal({
               name="requestType"
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 focus:ring-white/10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PEDIDO_CARTAO">Pedido de Cartão Frota+</SelectItem>
-                    <SelectItem value="ABASTECIMENTO_MANUAL">Abastecimento Manual</SelectItem>
-                    <SelectItem value="SUPORTE">Suporte</SelectItem>
-                    <SelectItem value="CARREGAMENTO">Carregamento</SelectItem>
-                    <SelectItem value="OUTRO">Outro</SelectItem>
-                  </SelectContent>
-                </Select>
+              <SelectTrigger className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 focus:ring-white/10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PEDIDO_CARTAO">Pedido de Cartão Frota+</SelectItem>
+                <SelectItem value="ABASTECIMENTO_MANUAL">Abastecimento Manual</SelectItem>
+                <SelectItem value="SUPORTE">Suporte</SelectItem>
+                <SelectItem value="CARREGAMENTO">Carregamento</SelectItem>
+                <SelectItem value="OUTRO">Outro</SelectItem>
+              </SelectContent>
+            </Select>
               )}
             />
           </div>
@@ -220,7 +220,7 @@ export default function CreateTicketModal({
               control={control}
               name="subject"
               render={({ field }) => (
-                <Input
+            <Input
                   {...field}
                   placeholder="Ex: Novo cartão para cliente X"
                   className={[
@@ -243,16 +243,16 @@ export default function CreateTicketModal({
                 name="priority"
                 render={({ field }) => (
                   <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 focus:ring-white/10">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Urgente">Urgente</SelectItem>
-                      <SelectItem value="Alta">Alta</SelectItem>
-                      <SelectItem value="Normal">Normal</SelectItem>
-                      <SelectItem value="Baixa">Baixa</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <SelectTrigger className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 focus:ring-white/10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Urgente">Urgente</SelectItem>
+                  <SelectItem value="Alta">Alta</SelectItem>
+                  <SelectItem value="Normal">Normal</SelectItem>
+                  <SelectItem value="Baixa">Baixa</SelectItem>
+                </SelectContent>
+              </Select>
                 )}
               />
             </div>
@@ -263,12 +263,12 @@ export default function CreateTicketModal({
                 control={control}
                 name="matricula"
                 render={({ field }) => (
-                  <Input
+              <Input
                     value={field.value ?? ""}
                     onChange={(e) => field.onChange(formatMatricula(e.target.value))}
-                    placeholder="AA-00-BB"
-                    className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 placeholder:text-zinc-400 focus-visible:ring-white/10"
-                    inputMode="text"
+                placeholder="AA-00-BB"
+                className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 placeholder:text-zinc-400 focus-visible:ring-white/10"
+                inputMode="text"
                   />
                 )}
               />
@@ -339,9 +339,9 @@ export default function CreateTicketModal({
               control={control}
               name="description"
               render={({ field }) => (
-                <Textarea
+            <Textarea
                   {...field}
-                  placeholder="Descreva a necessidade..."
+              placeholder="Descreva a necessidade..."
                   className={[
                     "min-h-[140px] rounded-xl bg-zinc-800 text-white border-zinc-700 placeholder:text-zinc-400 focus-visible:ring-white/10",
                     errors.description ? "border-red-500/60 focus-visible:ring-red-500/20" : "",

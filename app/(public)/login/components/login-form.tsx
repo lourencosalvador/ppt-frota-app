@@ -67,7 +67,7 @@ export default function LoginForm() {
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
 
     toast.success("Sessão iniciada com sucesso.");
-    router.push("/home");
+    router.push(session.role === "admin" ? "/gestor" : session.role === "support" ? "/suporte" : "/home");
   }
 
   return (
