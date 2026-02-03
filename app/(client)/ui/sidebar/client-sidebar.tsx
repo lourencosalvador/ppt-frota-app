@@ -11,19 +11,24 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import type { DemoSession } from "@/app/lib/demo-auth";
-import { SESSION_STORAGE_KEY } from "@/app/lib/demo-auth";
+import type { AppSession } from "@/app/lib/auth/session";
+import { logout as apiLogout } from "@/app/lib/api/auth";
 import NavItem from "@/app/(client)/ui/sidebar/nav-item";
 import { Button } from "@/components/ui/button";
 import InitialsAvatar from "@/components/ui/initials-avatar";
 
-export default function ClientSidebar({ session }: { session: DemoSession }) {
+export default function ClientSidebar({ session }: { session: AppSession }) {
   const router = useRouter();
 
-  function logout() {
-    localStorage.removeItem(SESSION_STORAGE_KEY);
-    toast.success("Sessão terminada.");
-    router.push("/");
+  async function logout() {
+    try {
+      await apiLogout();
+      toast.success("Sessão terminada.");
+    } catch {
+      toast.error("Falha ao terminar sessão.");
+    } finally {
+      router.push("/");
+    }
   }
 
   return (

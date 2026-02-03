@@ -2,35 +2,49 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
-import { SESSION_STORAGE_KEY, type DemoSession } from "@/app/lib/demo-auth";
+import { ApiError } from "@/app/lib/api/api-client";
+import { getMe, mapUserTypeToRole } from "@/app/lib/api/auth";
+import { getStoredSession, setStoredSession, type AppSession } from "@/app/lib/auth/session";
 import ClientDashboardShell from "@/app/(client)/ui/client-dashboard-shell";
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [session, setSession] = useState<DemoSession | null>(null);
+  const [session, setSession] = useState<AppSession | null>(() => getStoredSession());
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (!raw) {
+    let mounted = true;
+    (async () => {
+      try {
+        const me = await getMe();
+        const next: AppSession = {
+          email: me.email,
+          name: me.name,
+          role: mapUserTypeToRole(me.type),
+          createdAt: Date.now(),
+        };
+        if (!mounted) return;
+        if (next.role !== "client") {
+          router.replace("/");
+          return;
+        }
+        setStoredSession(next);
+        setSession(next);
+      } catch (e) {
+        if (!mounted) return;
+        if (e instanceof ApiError && e.status === 401) {
+          router.replace("/");
+          return;
+        }
+        toast.error(e instanceof ApiError ? e.message : "Falha ao validar sessão.");
         router.replace("/");
-        return;
       }
-      const parsed = JSON.parse(raw) as DemoSession;
-      if (!parsed?.email) {
-        router.replace("/");
-        return;
-      }
-      if (parsed.role !== "client") {
-        router.replace("/");
-        return;
-      }
-      setSession(parsed);
-    } catch {
-      router.replace("/");
-    }
+    })();
+    return () => {
+      mounted = false;
+    };
   }, [router, pathname]);
 
   if (!session) {

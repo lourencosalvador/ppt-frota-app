@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { SESSION_STORAGE_KEY, type DemoSession } from "@/app/lib/demo-auth";
+import { getStoredSession, type AppSession } from "@/app/lib/auth/session";
 import ActivityCard from "@/app/(client)/home/components/activity-card";
 import HistoryPanel from "@/app/(client)/home/components/history-panel";
 import QuickActions from "@/app/(client)/home/components/quick-actions";
@@ -33,17 +33,11 @@ function getTodayLabel() {
 }
 
 export default function MeuPainelClient() {
-  const [session, setSession] = useState<DemoSession | null>(null);
+  const [session, setSession] = useState<AppSession | null>(null);
   const [supportOpen, setSupportOpen] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as DemoSession;
-      if (!parsed?.email) return;
-      setSession(parsed);
-    } catch {}
+    setSession(getStoredSession());
   }, []);
 
   const name = session?.name ?? "Cliente";

@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
-import type { DemoSession } from "@/app/lib/demo-auth";
+import type { AppSession } from "@/app/lib/auth/session";
 import ClientSidebar from "@/app/(client)/ui/sidebar/client-sidebar";
 import ClientTopbar from "@/app/(client)/ui/topbar/client-topbar";
 
@@ -18,7 +18,7 @@ export default function ClientDashboardShell({
   session,
   children,
 }: {
-  session: DemoSession;
+  session: AppSession;
   children: ReactNode;
 }) {
   const pathname = usePathname();

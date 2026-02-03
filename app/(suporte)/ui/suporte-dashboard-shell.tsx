@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
-import type { DemoSession } from "@/app/lib/demo-auth";
+import type { AppSession } from "@/app/lib/auth/session";
 import SuporteSidebar from "@/app/(suporte)/ui/sidebar/suporte-sidebar";
 import ClientTopbar from "@/app/(client)/ui/topbar/client-topbar";
 
@@ -19,7 +19,7 @@ export default function SuporteDashboardShell({
   session,
   children,
 }: {
-  session: DemoSession;
+  session: AppSession;
   children: ReactNode;
 }) {
   const pathname = usePathname();

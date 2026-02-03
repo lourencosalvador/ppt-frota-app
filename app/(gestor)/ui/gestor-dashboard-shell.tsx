@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
-import type { DemoSession } from "@/app/lib/demo-auth";
+import type { AppSession } from "@/app/lib/auth/session";
 import GestorSidebar from "@/app/(gestor)/ui/sidebar/gestor-sidebar";
 import ClientTopbar from "@/app/(client)/ui/topbar/client-topbar";
 
@@ -20,7 +20,7 @@ export default function GestorDashboardShell({
   session,
   children,
 }: {
-  session: DemoSession;
+  session: AppSession;
   children: ReactNode;
 }) {
   const pathname = usePathname();

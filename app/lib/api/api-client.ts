@@ -19,7 +19,15 @@ export class ApiError extends Error {
 
 function baseUrl() {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
-  return raw.endsWith("/") ? raw.slice(0, -1) : raw;
+  const normalized = raw.endsWith("/") ? raw.slice(0, -1) : raw;
+  if (!normalized) {
+    throw new ApiError(
+      "API não configurada. Define NEXT_PUBLIC_API_BASE_URL (ex: https://frota-backend-nbiw.onrender.com/api).",
+      0,
+      null,
+    );
+  }
+  return normalized;
 }
 
 let refreshInFlight: Promise<string | null> | null = null;

@@ -1,6 +1,6 @@
 import { apiFetch } from "@/app/lib/api/api-client";
 import { clearTokens, setTokens } from "@/app/lib/auth/tokens";
-import { SESSION_STORAGE_KEY, type DemoSession } from "@/app/lib/demo-auth";
+import { SESSION_STORAGE_KEY, type AppRole, type AppSession } from "@/app/lib/auth/session";
 
 export type ApiUser = {
   id: string;
@@ -15,7 +15,7 @@ export type AuthResponse = {
   user: ApiUser;
 };
 
-export function mapUserTypeToRole(type: string): DemoSession["role"] {
+export function mapUserTypeToRole(type: string): AppRole {
   const t = String(type || "").toLowerCase();
   if (t === "admin" || t === "gestor") return "admin";
   if (t === "support" || t === "suporte") return "support";
@@ -24,7 +24,7 @@ export function mapUserTypeToRole(type: string): DemoSession["role"] {
 
 export function persistAuth(auth: AuthResponse) {
   setTokens({ access: auth.access, refresh: auth.refresh });
-  const session: DemoSession = {
+  const session: AppSession = {
     email: auth.user.email,
     name: auth.user.name,
     role: mapUserTypeToRole(auth.user.type),
