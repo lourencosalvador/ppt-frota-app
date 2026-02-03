@@ -5,6 +5,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import AuthShell from "@/app/(public)/ui/auth-shell";
+import { ApiError } from "@/app/lib/api/api-client";
+import { requestPasswordReset } from "@/app/lib/api/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,11 +27,20 @@ export default function RecoverPasswordClient() {
     }
 
     setIsLoading(true);
-    await new Promise<void>((r) => setTimeout(r, 800));
-    setIsLoading(false);
-
-    toast.success("Código enviado. Confere o teu email (demo).");
-    router.push(`/recuperar-senha/otp?email=${encodeURIComponent(normalizedEmail)}`);
+    try {
+      const res = await requestPasswordReset(normalizedEmail);
+      if (res.code) {
+        toast.success(`Código enviado. (Demo) OTP: ${res.code}`);
+      } else {
+        toast.success("Código enviado. Confere o teu email.");
+      }
+      router.push(`/recuperar-senha/otp?email=${encodeURIComponent(normalizedEmail)}`);
+    } catch (e) {
+      if (e instanceof ApiError) toast.error(e.message);
+      else toast.error("Falha ao enviar o código.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (

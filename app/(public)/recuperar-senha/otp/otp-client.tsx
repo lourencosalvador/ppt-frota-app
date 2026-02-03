@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import AuthShell from "@/app/(public)/ui/auth-shell";
+import { ApiError } from "@/app/lib/api/api-client";
+import { confirmPasswordReset, requestPasswordReset } from "@/app/lib/api/auth";
 import { Button } from "@/components/ui/button";
 import {
   InputOTP,
@@ -12,8 +14,12 @@ import {
   InputOTPSeparator,
   InputOTPSlot,
 } from "@/components/ui/input-otp";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-const DEMO_OTP = "123456";
+function digitsOnly(v: string) {
+  return v.replace(/\D/g, "");
+}
 
 export default function OtpClient() {
   const router = useRouter();
@@ -21,6 +27,7 @@ export default function OtpClient() {
   const email = useMemo(() => searchParams.get("email") ?? "", [searchParams]);
 
   const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   async function verify() {
@@ -31,21 +38,37 @@ export default function OtpClient() {
       return;
     }
 
-    setIsLoading(true);
-    await new Promise<void>((r) => setTimeout(r, 700));
-    setIsLoading(false);
-
-    if (code !== DEMO_OTP) {
-      toast.error("Código inválido. Tenta novamente.");
+    if (newPassword.length < 6) {
+      toast.error("A nova palavra-passe deve ter no mínimo 6 caracteres.");
       return;
     }
 
-    toast.success("Código confirmado com sucesso.");
-    router.push("/");
+    setIsLoading(true);
+    try {
+      await confirmPasswordReset({ email, code, new_password: newPassword });
+      toast.success("Senha redefinida com sucesso.");
+      router.push("/");
+    } catch (e) {
+      if (e instanceof ApiError) toast.error(e.message);
+      else toast.error("Falha ao confirmar o código.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
-  function resend() {
-    toast.success("Código reenviado (demo). Usa 123456.");
+  async function resend() {
+    if (!email) {
+      toast.error("Email inválido.");
+      return;
+    }
+    try {
+      const res = await requestPasswordReset(email);
+      if (res.code) toast.success(`Código reenviado. (Demo) OTP: ${res.code}`);
+      else toast.success("Código reenviado.");
+    } catch (e) {
+      if (e instanceof ApiError) toast.error(e.message);
+      else toast.error("Falha ao reenviar o código.");
+    }
   }
 
   return (
@@ -63,7 +86,7 @@ export default function OtpClient() {
         <div>
           <InputOTP
             value={code}
-            onChange={(v) => setCode(v.replace(/\D/g, ""))}
+            onChange={(v) => setCode(digitsOnly(v))}
             maxLength={6}
             autoFocus
             inputMode="numeric"
@@ -82,9 +105,17 @@ export default function OtpClient() {
               <InputOTPSlot index={5} />
             </InputOTPGroup>
           </InputOTP>
-          <p className="mt-3 text-sm font-medium text-zinc-500">
-            Demo: usa <span className="font-semibold text-zinc-800">123456</span>
-          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="new_password">Nova palavra-passe</Label>
+          <Input
+            id="new_password"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="mínimo 6 caracteres"
+          />
         </div>
 
         <div className="flex items-center justify-start gap-3 pt-4">

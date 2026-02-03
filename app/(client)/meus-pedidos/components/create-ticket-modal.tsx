@@ -8,6 +8,9 @@ import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+import { ApiError } from "@/app/lib/api/api-client";
+import { useCreateTicket } from "@/app/lib/api/tickets-hooks";
+import { apiTicketToUi } from "@/app/(client)/meus-pedidos/lib/ticket-api-mapper";
 import type {
   Ticket,
   TicketPriority,
@@ -52,14 +55,32 @@ function toTicketType(v: string): TicketType {
   }
 }
 
-function nextTicketCode(existing: Ticket[]) {
-  const nums = existing
-    .map((t) => t.code.match(/TKT-(\d{4})-(\d+)/))
-    .map((m) => (m ? Number(m[2]) : 0))
-    .filter(Boolean);
-  const next = (nums.length ? Math.max(...nums) : 0) + 1;
-  const year = new Date().getFullYear();
-  return `TKT-${year}-${String(next).padStart(3, "0")}`;
+function requestTypeToApi(v: TicketFormValues["requestType"]) {
+  switch (v) {
+    case "PEDIDO_CARTAO":
+      return "card_request";
+    case "ABASTECIMENTO_MANUAL":
+      return "manual_refuel";
+    case "CARREGAMENTO":
+      return "account_topup";
+    case "SUPORTE":
+      return "support";
+    default:
+      return "other";
+  }
+}
+
+function priorityToApi(v: TicketFormValues["priority"]) {
+  switch (v) {
+    case "Urgente":
+      return "urgent";
+    case "Alta":
+      return "high";
+    case "Baixa":
+      return "low";
+    default:
+      return "normal";
+  }
 }
 
 const ticketSchema = z.object({
@@ -79,19 +100,24 @@ export default function CreateTicketModal({
   requesterName,
   requesterRole,
   existingTickets,
+  mode = "local",
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onCreate: (ticket: Ticket) => void;
+  onCreate?: (ticket: Ticket) => void;
   requesterName: string;
   requesterRole: string;
-  existingTickets: Ticket[];
+  existingTickets?: Ticket[];
+  mode?: "local" | "api";
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [fileIsImage, setFileIsImage] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+
+  const createTicket = useCreateTicket();
 
   const {
     control,
@@ -125,6 +151,7 @@ export default function CreateTicketModal({
       description: "",
     });
     setFileName(null);
+    setFile(null);
     if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
     setFilePreviewUrl(null);
     setFileIsImage(false);
@@ -133,49 +160,73 @@ export default function CreateTicketModal({
   async function submit(values: TicketFormValues) {
     if (isSubmitting) return;
     setIsSubmitting(true);
-    await sleep(1800);
+    try {
+      if (mode === "api") {
+        const form = new FormData();
+        form.set("ticket_type", requestTypeToApi(values.requestType));
+        form.set("subject", values.subject.trim());
+        form.set("priority", priorityToApi(values.priority));
+        if (values.description?.trim()) form.set("description", values.description.trim());
+        if (values.matricula?.trim()) form.set("vehicle_registration", values.matricula.trim().toUpperCase());
+        if (file) form.set("attachment", file);
 
-    const status: TicketStatus = values.requestType === "PEDIDO_CARTAO" ? "EM ANALISE" : "ABERTO";
-    const code = nextTicketCode(existingTickets);
+        const created = await createTicket.mutateAsync(form);
+        const uiTicket = apiTicketToUi(created, requesterRole);
+        onCreate?.(uiTicket);
+        toast.success("Ticket criado com sucesso.");
+        onOpenChange(false);
+        reset();
+        setIsSubmitting(false);
+        return;
+      }
 
-    const matriculaValue = (values.matricula ?? "").trim();
-    const fullSubject = matriculaValue
-      ? `${values.subject.trim()} (${matriculaValue.toUpperCase()})`
-      : values.subject.trim();
+      // fallback local (demo)
+      await sleep(900);
+      const status: TicketStatus = values.requestType === "PEDIDO_CARTAO" ? "EM ANALISE" : "ABERTO";
+      const matriculaValue = (values.matricula ?? "").trim();
+      const fullSubject = matriculaValue
+        ? `${values.subject.trim()} (${matriculaValue.toUpperCase()})`
+        : values.subject.trim();
+      const requestTypeLabel =
+        values.requestType === "PEDIDO_CARTAO"
+          ? "Pedido de Cartão Frota+"
+          : values.requestType === "ABASTECIMENTO_MANUAL"
+            ? "Abastecimento Manual"
+            : values.requestType === "SUPORTE"
+              ? "Suporte"
+              : values.requestType === "CARREGAMENTO"
+                ? "Carregamento"
+                : "Outro";
 
-    const requestTypeLabel =
-      values.requestType === "PEDIDO_CARTAO"
-        ? "Pedido de Cartão Frota+"
-        : values.requestType === "ABASTECIMENTO_MANUAL"
-          ? "Abastecimento Manual"
-          : values.requestType === "SUPORTE"
-            ? "Suporte"
-            : values.requestType === "CARREGAMENTO"
-              ? "Carregamento"
-              : "Outro";
+      const newTicket: Ticket = {
+        id: crypto.randomUUID(),
+        code: `TKT-${new Date().getFullYear()}-${String((existingTickets?.length ?? 0) + 1).padStart(3, "0")}`,
+        subject: fullSubject,
+        type: toTicketType(values.requestType),
+        requester: requesterName,
+        requesterRole,
+        priority: values.priority as TicketPriority,
+        status,
+        createdAt: new Date().toISOString().slice(0, 10),
+        description: values.description.trim(),
+        matricula: matriculaValue ? matriculaValue.toUpperCase() : undefined,
+        attachmentName: fileName ?? undefined,
+        requestTypeLabel,
+      };
 
-    const newTicket: Ticket = {
-      id: crypto.randomUUID(),
-      code,
-      subject: fullSubject,
-      type: toTicketType(values.requestType),
-      requester: requesterName,
-      requesterRole,
-      priority: values.priority as TicketPriority,
-      status,
-      createdAt: new Date().toISOString().slice(0, 10),
-      description: values.description.trim(),
-      matricula: matriculaValue ? matriculaValue.toUpperCase() : undefined,
-      attachmentName: fileName ?? undefined,
-      requestTypeLabel,
-    };
-
-    onCreate(newTicket);
-    toast.success("Ticket criado com sucesso.");
-
-    setIsSubmitting(false);
-    onOpenChange(false);
-    reset();
+      onCreate?.(newTicket);
+      toast.success("Ticket criado com sucesso.");
+      onOpenChange(false);
+      reset();
+    } catch (e) {
+      if (e instanceof ApiError) {
+        toast.error(e.message);
+      } else {
+        toast.error("Falha ao criar ticket.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -318,6 +369,7 @@ export default function CreateTicketModal({
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 setFileName(file ? file.name : null);
+                setFile(file ?? null);
 
                 if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
                 if (!file) {

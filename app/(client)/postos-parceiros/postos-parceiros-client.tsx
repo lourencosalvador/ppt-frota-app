@@ -1,11 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Filter, Zap } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Filter, Fuel, Zap } from "lucide-react";
+import { toast } from "sonner";
 
 import PostoCard from "@/app/(client)/postos-parceiros/components/posto-card";
-import { mockStations, type FuelType } from "@/app/(client)/postos-parceiros/lib/mock-stations";
+import type {
+  FuelAvailability,
+  FuelType,
+  PartnerStation,
+} from "@/app/(client)/postos-parceiros/lib/mock-stations";
 import StationHistoryModal from "@/app/(client)/postos-parceiros/components/station-history-modal";
+import { ApiError } from "@/app/lib/api/api-client";
+import { useStations } from "@/app/lib/api/stations-hooks";
 import {
   Select,
   SelectContent,
@@ -13,25 +20,77 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import EmptyState from "@/components/ui/empty-state";
 
 type FuelFilter = "TODOS" | FuelType;
+
+function hashSeed(input: string) {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function demoFuelStatus(seed: number): FuelAvailability["status"] {
+  const r = seed % 100;
+  if (r < 72) return "OK";
+  if (r < 88) return "LIMITADO";
+  return "INDISPONIVEL";
+}
+
+function mapStationToUi(s: { id: string; name: string; city: string; is_active: boolean }): PartnerStation {
+  const base = hashSeed(s.id);
+  const fuels: FuelAvailability[] = [
+    { fuel: "Diesel", status: demoFuelStatus(base + 1) },
+    { fuel: "Gasolina 95", status: demoFuelStatus(base + 7) },
+    { fuel: "AdBlue", status: demoFuelStatus(base + 13) },
+  ];
+
+  return {
+    id: s.id,
+    name: s.name,
+    city: s.city,
+    status: s.is_active ? "DISPONIVEL" : "INDISPONIVEL",
+    updatedLabel: "Agora mesmo",
+    fuels,
+  };
+}
 
 export default function PostosParceirosClient() {
   const [fuelFilter, setFuelFilter] = useState<FuelFilter>("TODOS");
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
+  const stationsQuery = useStations();
+  const lastErrorRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!stationsQuery.isError) return;
+    const err = stationsQuery.error;
+    const message = err instanceof ApiError ? err.message : "Falha ao carregar postos.";
+    if (lastErrorRef.current === message) return;
+    lastErrorRef.current = message;
+    toast.error(message);
+  }, [stationsQuery.error, stationsQuery.isError]);
+
+  const stations = useMemo<PartnerStation[]>(() => {
+    if (!stationsQuery.data?.length) return [];
+    return stationsQuery.data.map((s) => mapStationToUi(s));
+  }, [stationsQuery.data]);
+
   const filtered = useMemo(() => {
-    if (fuelFilter === "TODOS") return mockStations;
-    return mockStations.filter((s) =>
+    if (fuelFilter === "TODOS") return stations;
+    return stations.filter((s) =>
       s.fuels.some((f) => f.fuel === fuelFilter && f.status === "OK"),
     );
-  }, [fuelFilter]);
+  }, [fuelFilter, stations]);
 
   const selectedStation = useMemo(() => {
     if (!selectedStationId) return null;
-    return mockStations.find((s) => s.id === selectedStationId) ?? null;
-  }, [selectedStationId]);
+    return stations.find((s) => s.id === selectedStationId) ?? null;
+  }, [selectedStationId, stations]);
 
   return (
     <div className="w-full">
@@ -79,6 +138,15 @@ export default function PostosParceirosClient() {
           </div>
         </div>
 
+        {stationsQuery.isLoading ? (
+          <div className="mt-5 rounded-2xl border border-zinc-100/60 bg-white p-5 text-sm font-semibold text-zinc-500 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+              A carregar postos...
+            </span>
+          </div>
+        ) : null}
+
         <div className="mt-6 grid gap-5 lg:grid-cols-3">
           {filtered.map((s) => (
             <PostoCard
@@ -90,6 +158,16 @@ export default function PostosParceirosClient() {
               }}
             />
           ))}
+
+          {!stationsQuery.isLoading && filtered.length === 0 ? (
+            <div className="lg:col-span-3">
+              <EmptyState
+                icon={Fuel}
+                title="Nenhum posto encontrado"
+                description="Não encontramos postos para o filtro selecionado. Ajusta o combustível ou tenta novamente mais tarde."
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

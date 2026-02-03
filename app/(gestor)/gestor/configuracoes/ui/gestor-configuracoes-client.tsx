@@ -4,16 +4,17 @@ import { useMemo, useState } from "react";
 import { Banknote, Barcode, Building2, CreditCard, Landmark, Pencil, Plus, Settings, TicketPercent, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import type { PartnerStation } from "@/app/(gestor)/gestor/configuracoes/lib/mock-config";
-import { mockPartnerStations, mockPaymentMethods, type PaymentMethod } from "@/app/(gestor)/gestor/configuracoes/lib/mock-config";
+import type { ApiStation } from "@/app/lib/api/stations";
+import { useCreateStation, useStations } from "@/app/lib/api/stations-hooks";
+import { mockPaymentMethods, type PaymentMethod } from "@/app/(gestor)/gestor/configuracoes/lib/mock-config";
 import StationModal from "@/app/(gestor)/gestor/configuracoes/components/station-modal";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type SectionKey = "POSTOS" | "METODOS" | "NOTIFICACOES" | "PERFIS";
 
-function statusPill(status: PartnerStation["status"]) {
-  if (status === "ATIVO") return "bg-emerald-50 text-emerald-700 border-emerald-100";
+function statusPill(active: boolean) {
+  if (active) return "bg-emerald-50 text-emerald-700 border-emerald-100";
   return "bg-red-50 text-red-700 border-red-100";
 }
 
@@ -57,11 +58,13 @@ function iconForMethod(name: string) {
 
 export default function GestorConfiguracoesClient() {
   const [section, setSection] = useState<SectionKey>("POSTOS");
-  const [stations, setStations] = useState<PartnerStation[]>(mockPartnerStations);
   const [methods, setMethods] = useState<PaymentMethod[]>(mockPaymentMethods);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<PartnerStation | null>(null);
+  const [editing, setEditing] = useState<ApiStation | null>(null);
+
+  const stationsQuery = useStations({ include_inactive: true });
+  const createStation = useCreateStation();
 
   const title = useMemo(() => {
     if (section === "POSTOS") return { t: "Gestão de Postos Parceiros", s: "Adicione ou remova postos da rede autorizada." };
@@ -79,12 +82,9 @@ export default function GestorConfiguracoesClient() {
           if (!v) setEditing(null);
         }}
         initial={editing}
-        onSave={(st) => {
-          setStations((prev) => {
-            const exists = prev.some((p) => p.id === st.id);
-            if (exists) return prev.map((p) => (p.id === st.id ? st : p));
-            return [st, ...prev];
-          });
+        onCreate={async (body) => {
+          const created = await createStation.mutateAsync(body);
+          return created;
         }}
       />
 
@@ -156,6 +156,21 @@ export default function GestorConfiguracoesClient() {
 
             {section === "POSTOS" ? (
               <div className="overflow-hidden">
+                {stationsQuery.isLoading ? (
+                  <div className="px-6 py-6 text-sm font-semibold text-zinc-500">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+                      A carregar postos...
+                    </span>
+                  </div>
+                ) : null}
+
+                {stationsQuery.isError ? (
+                  <div className="px-6 py-6 text-sm font-semibold text-red-700">
+                    Falha ao carregar postos. Verifica a API e autenticação.
+                  </div>
+                ) : null}
+
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-zinc-50/50">
@@ -166,17 +181,19 @@ export default function GestorConfiguracoesClient() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {stations.map((s) => (
+                    {(stationsQuery.data ?? []).map((s) => (
                       <TableRow key={s.id}>
                         <TableCell className="py-5">
                           <div className="text-sm font-extrabold text-zinc-900">{s.name}</div>
+                          <div className="mt-0.5 text-xs font-semibold text-zinc-400">{s.address}</div>
                         </TableCell>
                         <TableCell className="py-5">
-                          <div className="text-sm font-semibold text-zinc-600">{s.location}</div>
+                          <div className="text-sm font-semibold text-zinc-600">{s.city}</div>
+                          <div className="text-xs font-semibold text-zinc-400">{s.province}</div>
                         </TableCell>
                         <TableCell className="py-5">
-                          <span className={`inline-flex rounded-md border px-3 py-1 text-[10px] font-extrabold ${statusPill(s.status)}`}>
-                            {s.status === "ATIVO" ? "Ativo" : "Indisponível"}
+                          <span className={`inline-flex rounded-md border px-3 py-1 text-[10px] font-extrabold ${statusPill(s.is_active)}`}>
+                            {s.is_active ? "Ativo" : "Indisponível"}
                           </span>
                         </TableCell>
                         <TableCell className="py-5">
@@ -195,8 +212,7 @@ export default function GestorConfiguracoesClient() {
                             <button
                               type="button"
                               onClick={() => {
-                                setStations((prev) => prev.filter((p) => p.id !== s.id));
-                                toast.success("Posto removido.");
+                                toast.info("Remover posto: endpoint ainda não disponível.");
                               }}
                               className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-zinc-400 hover:bg-zinc-50 hover:text-zinc-700"
                               aria-label="Remover"
@@ -207,6 +223,14 @@ export default function GestorConfiguracoesClient() {
                         </TableCell>
                       </TableRow>
                     ))}
+
+                    {!stationsQuery.isLoading && !stationsQuery.isError && (stationsQuery.data?.length ?? 0) === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="py-14 text-center">
+                          <div className="text-sm font-semibold text-zinc-400">Nenhum posto encontrado.</div>
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
                   </TableBody>
                 </Table>
               </div>

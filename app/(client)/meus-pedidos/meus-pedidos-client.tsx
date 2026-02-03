@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FileText, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -14,40 +14,46 @@ import {
 } from "@/components/ui/select";
 import TicketsTable from "@/app/(client)/meus-pedidos/components/tickets-table";
 import {
-  mockTickets,
   type Ticket,
   type TicketStatus,
 } from "@/app/(client)/meus-pedidos/lib/mock-tickets";
 import CreateTicketModal from "@/app/(client)/meus-pedidos/components/create-ticket-modal";
 import TicketDetailsModal from "@/app/(client)/meus-pedidos/components/ticket-details-modal";
+import { ApiError } from "@/app/lib/api/api-client";
+import { useDeleteTicket, useTickets } from "@/app/lib/api/tickets-hooks";
+import { apiTicketToUi, uiStatusToApi } from "@/app/(client)/meus-pedidos/lib/ticket-api-mapper";
+import EmptyState from "@/components/ui/empty-state";
 
 export default function MeusPedidosClient() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("TODOS");
-  const [tickets, setTickets] = useState<Ticket[]>(mockTickets);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
-  const filteredTickets = useMemo(() => {
-    let result = [...tickets];
+  const apiStatus = statusFilter === "TODOS" ? undefined : uiStatusToApi(statusFilter as TicketStatus);
+  const ticketsQuery = useTickets({
+    status: apiStatus,
+    search: searchQuery.trim() ? searchQuery.trim() : undefined,
+    page: 1,
+    page_size: 100,
+  });
+  const deleteMutation = useDeleteTicket();
+  const lastErrorRef = useRef<string | null>(null);
 
-    if (statusFilter !== "TODOS") {
-      result = result.filter((t) => t.status === (statusFilter as TicketStatus));
-    }
+  useEffect(() => {
+    if (!ticketsQuery.isError) return;
+    const err = ticketsQuery.error;
+    const message = err instanceof ApiError ? err.message : "Falha ao carregar tickets.";
+    if (lastErrorRef.current === message) return;
+    lastErrorRef.current = message;
+    toast.error(message);
+  }, [ticketsQuery.error, ticketsQuery.isError]);
 
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (t) =>
-          t.code.toLowerCase().includes(query) ||
-          t.subject.toLowerCase().includes(query) ||
-          t.type.toLowerCase().includes(query)
-      );
-    }
-
-    return result;
-  }, [searchQuery, statusFilter, tickets]);
+  const tickets = useMemo<Ticket[]>(() => {
+    const list = ticketsQuery.data ?? [];
+    return list.map((t) => apiTicketToUi(t, "Cliente"));
+  }, [ticketsQuery.data]);
 
   return (
     <div className="w-full">
@@ -56,13 +62,7 @@ export default function MeusPedidosClient() {
         onOpenChange={setIsCreateOpen}
         requesterName="Lorrys Cliente"
         requesterRole="Cliente"
-        existingTickets={tickets}
-        onCreate={(t) => {
-          setTickets((prev) => [t, ...prev]);
-          if (statusFilter !== "TODOS" && t.status !== (statusFilter as TicketStatus)) {
-            toast.message("Ticket criado, mas não aparece por causa do filtro de estado.");
-          }
-        }}
+        mode="api"
       />
 
       <TicketDetailsModal
@@ -112,22 +112,45 @@ export default function MeusPedidosClient() {
           </div>
         </div>
 
-        <TicketsTable
-          tickets={filteredTickets}
-          onViewDetails={(t) => {
-            setSelectedTicket(t);
-            setDetailsOpen(true);
-          }}
-          onDelete={(t) => {
-            setTickets((prev) => prev.filter((x) => x.id !== t.id));
-            toast.success("Ticket removido.");
-          }}
-        />
+        {ticketsQuery.isLoading ? (
+          <div className="px-6 py-6 text-sm font-semibold text-zinc-500">
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+              A carregar tickets...
+            </span>
+          </div>
+        ) : null}
+
+        {!ticketsQuery.isLoading && tickets.length === 0 ? (
+          <div className="px-6 py-6">
+            <EmptyState
+              icon={FileText}
+              title="Nenhum pedido encontrado"
+              description="Quando criares um ticket, ele vai aparecer aqui. Usa o botão “Solicitar” para abrir um novo pedido."
+              actionLabel="Solicitar"
+              onAction={() => setIsCreateOpen(true)}
+            />
+          </div>
+        ) : (
+          <TicketsTable
+            tickets={tickets}
+            onViewDetails={(t) => {
+              setSelectedTicket(t);
+              setDetailsOpen(true);
+            }}
+            onDelete={(t) => {
+              deleteMutation.mutate(t.id, {
+                onSuccess: () => toast.success("Ticket removido."),
+                onError: () => toast.error("Falha ao remover ticket."),
+              });
+            }}
+          />
+        )}
 
         <div className="flex items-center justify-between border-t border-zinc-100 bg-white px-6 py-4">
           <div className="text-sm font-medium text-zinc-500">
-            Mostrando {filteredTickets.length} resultado
-            {filteredTickets.length !== 1 && "s"}
+            Mostrando {tickets.length} resultado
+            {tickets.length !== 1 && "s"}
           </div>
 
           <div className="flex items-center gap-2">

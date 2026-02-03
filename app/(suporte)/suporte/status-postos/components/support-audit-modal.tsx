@@ -3,11 +3,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Eye, History, Play, ShieldCheck, Zap, X } from "lucide-react";
 import { toast } from "sonner";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 
-import type { ManualFuelRecord, ManualFuelStatus } from "@/app/(client)/postos-parceiros/lib/mock-history";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ApiError } from "@/app/lib/api/api-client";
+import type { StationAuditStatus } from "@/app/lib/api/stations";
+import { useStationAudit } from "@/app/lib/api/stations-hooks";
+import { useJustifySupportTicket } from "@/app/lib/api/support-tickets-hooks";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 type TabKey = "TODOS" | "PENDENTES" | "REGULARIZADOS";
+
+const justifySchema = z.object({
+  justification: z.string().trim().min(1, "Este campo é obrigatório."),
+});
+
+type JustifyValues = z.infer<typeof justifySchema>;
 
 function formatKz(v: number) {
   return new Intl.NumberFormat("pt-AO", {
@@ -16,20 +30,10 @@ function formatKz(v: number) {
   }).format(v);
 }
 
-function statusLabel(status: ManualFuelStatus) {
-  if (status === "EM REGULARIZAÇÃO") return "REGULARIZADO";
-  return status;
-}
-
-function statusBadge(status: ManualFuelStatus) {
-  switch (status) {
-    case "ABERTO":
-      return "bg-blue-50 text-blue-700 border-blue-100";
-    case "APROVADO":
-      return "bg-zinc-100 text-zinc-700 border-zinc-200";
-    case "EM REGULARIZAÇÃO":
-      return "bg-emerald-50 text-emerald-700 border-emerald-100";
-  }
+function statusBadge(status: "pending" | "regularized" | "other") {
+  if (status === "pending") return "bg-blue-50 text-blue-700 border-blue-100";
+  if (status === "regularized") return "bg-emerald-50 text-emerald-700 border-emerald-100";
+  return "bg-zinc-100 text-zinc-700 border-zinc-200";
 }
 
 function tabButton(active: boolean) {
@@ -38,77 +42,177 @@ function tabButton(active: boolean) {
     : "bg-white text-zinc-500 border-transparent hover:text-zinc-700";
 }
 
-function formatDateDisplay(date: string) {
-  // aceita "YYYY-MM-DD" e "M/D/YYYY" (mantém se já tiver /)
-  if (date.includes("/")) return date;
-  const m = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return date;
-  const [, y, mm, dd] = m;
-  return `${Number(mm)}/${Number(dd)}/${y}`;
+function formatDateTime(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { date: iso, time: "" };
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(d.getFullYear());
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return { date: `${dd}/${mm}/${yyyy}`, time: `${hh}:${min}` };
 }
 
-function parseYearFromDate(date: string) {
-  const parts = date.split("/");
-  const year = parts[2];
-  const y = year ? Number(year) : NaN;
-  return Number.isFinite(y) ? y : new Date().getFullYear();
+function parseNumberLike(v: string) {
+  const cleaned = String(v ?? "").replace(/[^\d.,-]/g, "");
+  if (!cleaned) return 0;
+  const both = cleaned.includes(".") && cleaned.includes(",");
+  const normalized = both ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned.replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
 }
 
-function auditCodeFor(record: ManualFuelRecord, idx: number) {
-  const year = parseYearFromDate(formatDateDisplay(record.date));
-  const num = 134 + idx;
-  return `TKT-${year}-${String(num).padStart(3, "0")}`;
+function extractVehicle(text: string) {
+  const t = String(text ?? "");
+  const m =
+    t.match(/\b[A-Z]{2,3}-?\d{2}-?[A-Z]{2,3}\b/) ??
+    t.match(/\b[A-Z]{2}\d{2}[A-Z]{2}\b/i);
+  return m ? m[0].toUpperCase() : null;
+}
+
+function extractLiters(text: string) {
+  const m = String(text ?? "").match(/(\d+(?:[.,]\d+)?)\s*(?:L|LITROS)\b/i);
+  if (!m) return null;
+  const n = parseNumberLike(m[1]);
+  return n > 0 ? n : null;
+}
+
+function extractAmount(text: string) {
+  const t = String(text ?? "");
+  const m1 = t.match(/\b(?:KZ|AOA)\s*([0-9][0-9.,]*)/i);
+  const m2 = t.match(/([0-9][0-9.,]*)\s*(?:KZ|AOA)\b/i);
+  const raw = (m1?.[1] ?? m2?.[1]) || null;
+  if (!raw) return null;
+  const n = parseNumberLike(raw);
+  return n > 0 ? n : null;
+}
+
+function normalizeTicketStatus(status: string): "pending" | "regularized" | "other" {
+  const s = String(status || "").toLowerCase();
+  if (s.includes("regular") || s.includes("closed") || s.includes("resolved") || s.includes("done")) return "regularized";
+  if (s.includes("open") || s.includes("pend") || s.includes("waiting")) return "pending";
+  return "other";
 }
 
 export default function SupportAuditModal({
   open,
   onOpenChange,
+  stationId,
   stationName,
-  records,
   operatorLabel = "ANA SUPORTE",
-  onUpdateStatus,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  stationId: string | null;
   stationName: string | null;
-  records: ManualFuelRecord[];
   operatorLabel?: string;
-  onUpdateStatus: (args: { recordId: string; status: ManualFuelStatus }) => void;
 }) {
   const [tab, setTab] = useState<TabKey>("TODOS");
+  const [justifyOpen, setJustifyOpen] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<{ id: string; code: string; entity: string } | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setTab("TODOS");
-  }, [open, stationName]);
+  }, [open, stationId]);
 
-  const filtered = useMemo(() => {
-    if (tab === "TODOS") return records;
-    if (tab === "PENDENTES") return records.filter((r) => r.status === "ABERTO");
-    return records.filter((r) => r.status !== "ABERTO");
-  }, [records, tab]);
+  const apiStatus: StationAuditStatus = tab === "TODOS" ? "all" : tab === "PENDENTES" ? "pending" : "regularized";
+  const auditQuery = useStationAudit(open ? stationId : null, apiStatus);
+  const justifyMutation = useJustifySupportTicket();
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isValid },
+    setError,
+  } = useForm<JustifyValues>({
+    resolver: zodResolver(justifySchema),
+    mode: "onChange",
+    defaultValues: { justification: "" },
+  });
+
+  useEffect(() => {
+    if (!justifyOpen) {
+      reset({ justification: "" });
+      setSelectedTicket(null);
+    }
+  }, [justifyOpen, reset]);
 
   const stats = useMemo(() => {
-    const totalKz = records.reduce((acc, r) => acc + r.amountKz, 0);
-    const totalLiters = records.reduce((acc, r) => acc + r.liters, 0);
-    const pending = records.filter((r) => r.status === "ABERTO").length;
-    const regularized = Math.max(0, records.length - pending);
-    return { totalKz, totalLiters, pending, regularized, count: records.length };
-  }, [records]);
+    const d = auditQuery.data;
+    if (!d) return null;
+    return {
+      totalLiters: parseNumberLike(d.total_volume),
+      totalKz: parseNumberLike(d.financial_impact),
+      pending: d.pending_tickets,
+      regularized: d.regularized_tickets,
+      count: d.total_tickets,
+      risk: parseNumberLike(d.anomaly_risk),
+    };
+  }, [auditQuery.data]);
+
+  const rows = useMemo(() => {
+    const d = auditQuery.data;
+    if (!d) return [];
+    return d.tickets.map((t) => {
+      const dt = formatDateTime(t.created_at);
+      const vehicle = extractVehicle(`${t.subject} ${t.description} ${t.resolution ?? ""}`) ?? "—";
+      const liters = extractLiters(`${t.subject} ${t.description}`) ?? null;
+      const amount = extractAmount(`${t.subject} ${t.description}`) ?? null;
+      const normalized = normalizeTicketStatus(t.status);
+      const statusLabel = (t.status_display || t.status || "").toString().toUpperCase();
+      return {
+        id: t.id,
+        code: t.ticket_code,
+        date: dt.date,
+        time: dt.time,
+        entity: t.requested_by_name || t.requested_by_email,
+        entitySub: t.company_name || "",
+        vehicle,
+        amount,
+        liters,
+        normalized,
+        statusLabel,
+      };
+    });
+  }, [auditQuery.data]);
 
   const dataState =
-    stats.pending === 0
+    (stats?.pending ?? 0) === 0
       ? { label: "DADOS REGULARIZADOS", cls: "text-emerald-700 border-emerald-100 bg-emerald-50/70", iconCls: "text-emerald-600" }
       : { label: "DADOS PENDENTES", cls: "text-blue-700 border-blue-100 bg-blue-50/70", iconCls: "text-blue-600" };
 
-  function justificar(r: ManualFuelRecord) {
-    onUpdateStatus({ recordId: r.id, status: "EM REGULARIZAÇÃO" });
-    toast.message("Registo regularizado.");
+  function openJustify(args: { id: string; code: string; entity: string }) {
+    if (!stationId) return;
+    setSelectedTicket(args);
+    setJustifyOpen(true);
+  }
+
+  async function submitJustify(values: JustifyValues) {
+    if (!stationId || !selectedTicket?.id) return;
+    try {
+      await justifyMutation.mutateAsync({
+        stationId,
+        ticketId: selectedTicket.id,
+        justification: values.justification.trim(),
+      });
+      toast.success("Ticket regularizado com sucesso.");
+      setJustifyOpen(false);
+    } catch (e) {
+      if (e instanceof ApiError) {
+        const msg = e.body?.errors?.justification?.[0];
+        if (msg) setError("justification", { type: "server", message: msg });
+        toast.error(e.message);
+      } else {
+        toast.error("Falha ao justificar ticket.");
+      }
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] max-w-[1120px] overflow-hidden rounded-[28px] border-0 bg-white p-0 shadow-[0_24px_70px_rgba(0,0,0,0.35)] [&_[data-dialog-close]]:hidden lg:left-[calc(50%+132px)]">
+      <DialogContent className="w-[96vw] max-w-[1120px] overflow-hidden rounded-[28px] border-0 bg-white p-0 shadow-[0_24px_70px_rgba(0,0,0,0.35)] **:data-dialog-close:hidden lg:left-[calc(50%+132px)]">
         <DialogHeader className="sr-only">
           <DialogTitle>{stationName ? `Abastecimentos - ${stationName}` : "Gestão de Abastecimentos"}</DialogTitle>
         </DialogHeader>
@@ -150,7 +254,7 @@ export default function SupportAuditModal({
                   Volume acumulado
                 </div>
                 <div className="mt-1 text-3xl font-extrabold text-zinc-900">
-                  {stats.totalLiters.toFixed(1)}{" "}
+                  {(stats?.totalLiters ?? 0).toFixed(1)}{" "}
                   <span className="text-base font-extrabold text-zinc-400">L</span>
                 </div>
               </div>
@@ -160,7 +264,7 @@ export default function SupportAuditModal({
                   Impacto financeiro
                 </div>
                 <div className="mt-1 text-3xl font-extrabold text-emerald-700">
-                  Kz{formatKz(stats.totalKz)}
+                  Kz{formatKz(stats?.totalKz ?? 0)}
                 </div>
               </div>
 
@@ -184,21 +288,21 @@ export default function SupportAuditModal({
                 onClick={() => setTab("TODOS")}
                 className={`rounded-full border px-4 py-2 text-xs font-extrabold uppercase tracking-widest ${tabButton(tab === "TODOS")}`}
               >
-                TODOS ({stats.count})
+                TODOS ({stats?.count ?? 0})
               </button>
               <button
                 type="button"
                 onClick={() => setTab("PENDENTES")}
                 className={`rounded-full border px-4 py-2 text-xs font-extrabold uppercase tracking-widest ${tabButton(tab === "PENDENTES")}`}
               >
-                PENDENTES ({stats.pending})
+                PENDENTES ({stats?.pending ?? 0})
               </button>
               <button
                 type="button"
                 onClick={() => setTab("REGULARIZADOS")}
                 className={`rounded-full border px-4 py-2 text-xs font-extrabold uppercase tracking-widest ${tabButton(tab === "REGULARIZADOS")}`}
               >
-                REGULARIZADOS ({stats.regularized})
+                REGULARIZADOS ({stats?.regularized ?? 0})
               </button>
             </div>
 
@@ -215,9 +319,23 @@ export default function SupportAuditModal({
                   </div>
 
                   <div className="space-y-4 bg-white p-4">
-                    {filtered.map((r, idx) => {
-                      const code = auditCodeFor(r, idx);
-                      const showJustificar = r.status === "ABERTO";
+                    {auditQuery.isLoading ? (
+                      <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-12 text-center">
+                        <div className="text-sm font-semibold text-zinc-500">
+                          <span className="inline-flex items-center gap-2">
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+                            A carregar auditoria...
+                          </span>
+                        </div>
+                      </div>
+                    ) : auditQuery.isError ? (
+                      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-12 text-center">
+                        <div className="text-sm font-semibold text-red-700">Falha ao carregar auditoria.</div>
+                      </div>
+                    ) : null}
+
+                    {rows.map((r) => {
+                      const showJustificar = r.normalized === "pending";
                       return (
                         <div
                           key={r.id}
@@ -225,17 +343,20 @@ export default function SupportAuditModal({
                         >
                           <div>
                             <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">
-                              {code}
+                              {r.code}
                             </div>
                             <div className="text-sm font-extrabold text-zinc-900">
-                              {formatDateDisplay(r.date)}
+                              {r.date}
                             </div>
+                            {r.time ? (
+                              <div className="text-xs font-semibold text-zinc-400">{r.time}</div>
+                            ) : null}
                           </div>
 
                           <div className="min-w-0 overflow-hidden">
-                            <div className="truncate text-sm font-extrabold text-zinc-800">{r.requester}</div>
+                            <div className="truncate text-sm font-extrabold text-zinc-800">{r.entity}</div>
                             <div className="truncate whitespace-nowrap text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">
-                              FROTA PARCEIRA
+                              {(r.entitySub || "FROTA PARCEIRA").toUpperCase()}
                             </div>
                           </div>
 
@@ -246,15 +367,19 @@ export default function SupportAuditModal({
                           </div>
 
                           <div>
-                            <div className="text-sm font-extrabold text-zinc-800">Kz {formatKz(r.amountKz)}</div>
-                            <div className="text-xs font-semibold text-zinc-400">{r.liters} LITROS</div>
+                            <div className="text-sm font-extrabold text-zinc-800">
+                              {typeof r.amount === "number" ? `Kz ${formatKz(r.amount)}` : "—"}
+                            </div>
+                            <div className="text-xs font-semibold text-zinc-400">
+                              {typeof r.liters === "number" ? `${r.liters.toFixed(1)} LITROS` : "—"}
+                            </div>
                           </div>
 
                           <div>
                             <span
-                              className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-widest ${statusBadge(r.status)}`}
+                              className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-widest ${statusBadge(r.normalized)}`}
                             >
-                              {statusLabel(r.status)}
+                              {r.statusLabel}
                             </span>
                           </div>
 
@@ -262,7 +387,7 @@ export default function SupportAuditModal({
                             {showJustificar ? (
                               <button
                                 type="button"
-                                onClick={() => justificar(r)}
+                                onClick={() => openJustify({ id: r.id, code: r.code, entity: r.entity })}
                                 className="inline-flex h-9 items-center gap-3 rounded-full bg-blue-600 px-4 text-[11px] font-extrabold uppercase tracking-widest text-white hover:bg-blue-700"
                               >
                                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/30 bg-white/10">
@@ -287,7 +412,7 @@ export default function SupportAuditModal({
                       );
                     })}
 
-                    {filtered.length === 0 ? (
+                    {!auditQuery.isLoading && !auditQuery.isError && rows.length === 0 ? (
                       <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-12 text-center">
                         <div className="text-sm font-semibold text-zinc-400">Nenhum registo encontrado.</div>
                       </div>
@@ -318,6 +443,66 @@ export default function SupportAuditModal({
           </div>
         </div>
       </DialogContent>
+
+      <Dialog open={justifyOpen} onOpenChange={setJustifyOpen}>
+        <DialogContent className="max-w-[640px]">
+          <DialogHeader className="pr-12">
+            <DialogTitle className="text-base font-extrabold text-zinc-900">
+              Justificar / Regularizar Ticket
+            </DialogTitle>
+            <div className="mt-1 text-sm font-semibold text-zinc-500">
+              {selectedTicket ? (
+                <span>
+                  <span className="font-extrabold text-zinc-700">{selectedTicket.code}</span> •{" "}
+                  <span className="text-zinc-600">{selectedTicket.entity}</span>
+                </span>
+              ) : null}
+            </div>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit(submitJustify)} className="px-6 py-6">
+            <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">
+              Justificativa
+            </div>
+            <Textarea
+              {...register("justification")}
+              placeholder="Descreve a justificativa da regularização..."
+              className={[
+                "mt-2 min-h-[140px] rounded-2xl",
+                errors.justification ? "border-red-300 focus-visible:ring-red-500/20" : "",
+              ].join(" ")}
+            />
+            {errors.justification?.message ? (
+              <div className="mt-2 text-xs font-semibold text-red-600">{errors.justification.message}</div>
+            ) : null}
+
+            <DialogFooter className="mt-6">
+              <button
+                type="button"
+                onClick={() => setJustifyOpen(false)}
+                className="text-sm font-extrabold uppercase tracking-widest text-zinc-400 hover:text-zinc-600"
+                disabled={justifyMutation.isPending}
+              >
+                Cancelar
+              </button>
+              <Button
+                type="submit"
+                className="h-11 rounded-2xl bg-blue-600 px-8 font-extrabold hover:bg-blue-700"
+                disabled={!isValid || justifyMutation.isPending}
+              >
+                {justifyMutation.isPending ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    A submeter...
+                  </span>
+                ) : (
+                  "Regularizar"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

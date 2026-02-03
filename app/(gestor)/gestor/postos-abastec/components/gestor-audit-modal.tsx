@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Eye, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 
-import type { ManualFuelRecord, ManualFuelStatus } from "@/app/(client)/postos-parceiros/lib/mock-history";
-import type { GestorStation } from "@/app/(gestor)/gestor/postos-abastec/lib/mock-gestor-stations";
+import type { StationAuditStatus } from "@/app/lib/api/stations";
+import { useStationAudit } from "@/app/lib/api/stations-hooks";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type TabKey = "TODOS" | "PENDENTES" | "REGULARIZADOS";
@@ -17,20 +17,10 @@ function formatKz(v: number) {
   }).format(v);
 }
 
-function statusLabel(status: ManualFuelStatus) {
-  if (status === "EM REGULARIZAÇÃO") return "REGULARIZADO";
-  return status;
-}
-
-function statusBadge(status: ManualFuelStatus) {
-  switch (status) {
-    case "ABERTO":
-      return "bg-blue-50 text-blue-700 border-blue-100";
-    case "APROVADO":
-      return "bg-zinc-100 text-zinc-700 border-zinc-200";
-    case "EM REGULARIZAÇÃO":
-      return "bg-emerald-50 text-emerald-700 border-emerald-100";
-  }
+function statusBadge(status: "pending" | "regularized" | "other") {
+  if (status === "pending") return "bg-blue-50 text-blue-700 border-blue-100";
+  if (status === "regularized") return "bg-emerald-50 text-emerald-700 border-emerald-100";
+  return "bg-zinc-100 text-zinc-700 border-zinc-200";
 }
 
 function tabButton(active: boolean) {
@@ -39,65 +29,124 @@ function tabButton(active: boolean) {
     : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50";
 }
 
-function parseYearFromDate(date: string) {
-  // suporta "21/05/2024" e "5/21/2024"
-  const parts = date.split("/");
-  const year = parts[2];
-  const y = year ? Number(year) : NaN;
-  return Number.isFinite(y) ? y : new Date().getFullYear();
+function parseNumberLike(v: string) {
+  const cleaned = String(v ?? "").replace(/[^\d.,-]/g, "");
+  if (!cleaned) return 0;
+  const both = cleaned.includes(".") && cleaned.includes(",");
+  const normalized = both ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned.replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
 }
 
-function auditCodeFor(record: ManualFuelRecord, idx: number) {
-  const year = parseYearFromDate(record.date);
-  const num = 400 + idx + 1;
-  return `TKT-${year}-${String(num).padStart(3, "0")}`;
+function formatDateTime(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { date: iso, time: "" };
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(d.getFullYear());
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return { date: `${dd}/${mm}/${yyyy}`, time: `${hh}:${min}` };
+}
+
+function extractVehicle(text: string) {
+  const t = String(text ?? "");
+  const m =
+    t.match(/\b[A-Z]{2,3}-?\d{2}-?[A-Z]{2,3}\b/) ??
+    t.match(/\b[A-Z]{2}\d{2}[A-Z]{2}\b/i);
+  return m ? m[0].toUpperCase() : null;
+}
+
+function extractLiters(text: string) {
+  const m = String(text ?? "").match(/(\d+(?:[.,]\d+)?)\s*(?:L|LITROS)\b/i);
+  if (!m) return null;
+  const n = parseNumberLike(m[1]);
+  return n > 0 ? n : null;
+}
+
+function extractAmount(text: string) {
+  const t = String(text ?? "");
+  const m1 = t.match(/\b(?:KZ|AOA)\s*([0-9][0-9.,]*)/i);
+  const m2 = t.match(/([0-9][0-9.,]*)\s*(?:KZ|AOA)\b/i);
+  const raw = (m1?.[1] ?? m2?.[1]) || null;
+  if (!raw) return null;
+  const n = parseNumberLike(raw);
+  return n > 0 ? n : null;
+}
+
+function normalizeTicketStatus(status: string): "pending" | "regularized" | "other" {
+  const s = String(status || "").toLowerCase();
+  if (s.includes("regular") || s.includes("closed") || s.includes("resolved") || s.includes("done")) return "regularized";
+  if (s.includes("open") || s.includes("pend") || s.includes("waiting")) return "pending";
+  return "other";
 }
 
 export default function GestorAuditModal({
   open,
   onOpenChange,
-  station,
-  records,
-  onUpdateStatus,
+  stationId,
+  stationName,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  station: GestorStation | null;
-  records: ManualFuelRecord[];
-  onUpdateStatus: (args: { stationId: string; recordId: string; status: ManualFuelStatus }) => void;
+  stationId: string | null;
+  stationName: string | null;
 }) {
   const [tab, setTab] = useState<TabKey>("TODOS");
 
   useEffect(() => {
     if (!open) return;
     setTab("TODOS");
-  }, [open, station?.id]);
+  }, [open, stationId]);
 
-  const filtered = useMemo(() => {
-    if (tab === "TODOS") return records;
-    if (tab === "PENDENTES") return records.filter((r) => r.status === "ABERTO");
-    return records.filter((r) => r.status !== "ABERTO");
-  }, [records, tab]);
+  const apiStatus: StationAuditStatus = tab === "TODOS" ? "all" : tab === "PENDENTES" ? "pending" : "regularized";
+  const auditQuery = useStationAudit(open ? stationId : null, apiStatus);
 
   const stats = useMemo(() => {
-    const totalKz = records.reduce((acc, r) => acc + r.amountKz, 0);
-    const totalLiters = records.reduce((acc, r) => acc + r.liters, 0);
-    const pending = records.filter((r) => r.status === "ABERTO").length;
-    const regularized = Math.max(0, records.length - pending);
-    const risk = Math.min(0.8, pending * 0.2); // 0.2% por pendência (mock)
-    return { totalKz, totalLiters, pending, regularized, risk, count: records.length };
-  }, [records]);
+    const d = auditQuery.data;
+    if (!d) return null;
+    return {
+      totalLiters: parseNumberLike(d.total_volume),
+      totalKz: parseNumberLike(d.financial_impact),
+      pending: d.pending_tickets,
+      regularized: d.regularized_tickets,
+      count: d.total_tickets,
+      risk: parseNumberLike(d.anomaly_risk),
+    };
+  }, [auditQuery.data]);
 
-  function approve(r: ManualFuelRecord) {
-    if (!station?.id) return;
-    onUpdateStatus({ stationId: station.id, recordId: r.id, status: "APROVADO" });
-    toast.success("Registo aprovado.");
+  const rows = useMemo(() => {
+    const d = auditQuery.data;
+    if (!d) return [];
+    return d.tickets.map((t) => {
+      const dt = formatDateTime(t.created_at);
+      const vehicle = extractVehicle(`${t.subject} ${t.description} ${t.resolution ?? ""}`) ?? "—";
+      const liters = extractLiters(`${t.subject} ${t.description}`) ?? null;
+      const amount = extractAmount(`${t.subject} ${t.description}`) ?? null;
+      const normalized = normalizeTicketStatus(t.status);
+      const statusLabel = (t.status_display || t.status || "").toString().toUpperCase();
+      return {
+        id: t.id,
+        code: t.ticket_code,
+        date: dt.date,
+        time: dt.time,
+        entity: t.requested_by_name || t.requested_by_email,
+        entitySub: t.company_name || "",
+        vehicle,
+        amount,
+        liters,
+        normalized,
+        statusLabel,
+      };
+    });
+  }, [auditQuery.data]);
+
+  function approve() {
+    toast.message("Ação disponível em breve.");
   }
 
-  function reject(r: ManualFuelRecord) {
-    if (!station?.id) return;
-    onUpdateStatus({ stationId: station.id, recordId: r.id, status: "EM REGULARIZAÇÃO" });
-    toast.message("Registo marcado como regularizado.");
+  function reject() {
+    toast.message("Ação disponível em breve.");
   }
 
   return (
@@ -105,7 +154,7 @@ export default function GestorAuditModal({
       <DialogContent className="max-w-[980px] border-0 bg-white p-0 shadow-[0_24px_70px_rgba(0,0,0,0.35)] lg:left-[calc(50%+132px)]">
         <DialogHeader className="sr-only">
           <DialogTitle>
-            {station?.name ? `Auditoria - ${station.name}` : "Módulo de Auditoria"}
+            {stationName ? `Auditoria - ${stationName}` : "Módulo de Auditoria"}
           </DialogTitle>
         </DialogHeader>
 
@@ -118,7 +167,7 @@ export default function GestorAuditModal({
                 </div>
                 <div className="min-w-0">
                   <div className="truncate text-base font-extrabold uppercase">
-                    {station?.name?.toUpperCase() ?? "POSTO"}
+                    {stationName?.toUpperCase() ?? "POSTO"}
                   </div>
                   <div className="mt-1 text-[11px] font-extrabold uppercase tracking-widest text-zinc-200/80">
                     INTERFACE DE AUDITORIA INSTITUCIONAL E CONTROLO DE FRAUDE
@@ -135,7 +184,7 @@ export default function GestorAuditModal({
                   Volume acumulado
                 </div>
                 <div className="mt-1 text-3xl font-extrabold text-zinc-900">
-                  {stats.totalLiters.toFixed(1)} <span className="text-base font-extrabold text-zinc-400">L</span>
+                  {(stats?.totalLiters ?? 0).toFixed(1)} <span className="text-base font-extrabold text-zinc-400">L</span>
                 </div>
               </div>
 
@@ -144,7 +193,7 @@ export default function GestorAuditModal({
                   Impacto financeiro
                 </div>
                 <div className="mt-1 text-3xl font-extrabold text-emerald-700">
-                  Kz{formatKz(stats.totalKz)}
+                  Kz{formatKz(stats?.totalKz ?? 0)}
                 </div>
               </div>
 
@@ -153,7 +202,7 @@ export default function GestorAuditModal({
                   Risco de anomalia
                 </div>
                 <div className="mt-1 text-3xl font-extrabold text-blue-600">
-                  {stats.risk.toFixed(1)}%
+                  {(stats?.risk ?? 0).toFixed(1)}%
                 </div>
               </div>
 
@@ -175,21 +224,21 @@ export default function GestorAuditModal({
                 onClick={() => setTab("TODOS")}
                 className={`rounded-xl border px-4 py-2 text-sm font-bold ${tabButton(tab === "TODOS")}`}
               >
-                TODOS ({stats.count})
+                TODOS ({stats?.count ?? 0})
               </button>
               <button
                 type="button"
                 onClick={() => setTab("PENDENTES")}
                 className={`rounded-xl border px-4 py-2 text-sm font-bold ${tabButton(tab === "PENDENTES")}`}
               >
-                PENDENTES ({stats.pending})
+                PENDENTES ({stats?.pending ?? 0})
               </button>
               <button
                 type="button"
                 onClick={() => setTab("REGULARIZADOS")}
                 className={`rounded-xl border px-4 py-2 text-sm font-bold ${tabButton(tab === "REGULARIZADOS")}`}
               >
-                REGULARIZADOS ({stats.regularized})
+                REGULARIZADOS ({stats?.regularized ?? 0})
               </button>
             </div>
 
@@ -207,25 +256,40 @@ export default function GestorAuditModal({
                   </div>
 
                   <div className="space-y-4 bg-white p-4">
-                    {filtered.map((r, idx) => {
-                      const code = auditCodeFor(r, idx);
-                      const showActions = r.status === "ABERTO";
+                    {auditQuery.isLoading ? (
+                      <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-12 text-center">
+                        <div className="text-sm font-semibold text-zinc-500">
+                          <span className="inline-flex items-center gap-2">
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+                            A carregar auditoria...
+                          </span>
+                        </div>
+                      </div>
+                    ) : auditQuery.isError ? (
+                      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-12 text-center">
+                        <div className="text-sm font-semibold text-red-700">Falha ao carregar auditoria.</div>
+                      </div>
+                    ) : null}
+
+                    {rows.map((r) => {
+                      const showActions = r.normalized === "pending";
                       return (
                         <div
                           key={r.id}
                           className="grid grid-cols-[180px_minmax(0,1.2fr)_180px_200px_160px_140px] items-center gap-4 rounded-2xl border border-zinc-100 bg-white px-5 py-4 shadow-[0_2px_18px_rgb(0,0,0,0.03)]"
                         >
                       <div>
-                        <div className="text-sm font-extrabold text-zinc-800">{code}</div>
+                        <div className="text-sm font-extrabold text-zinc-800">{r.code}</div>
                         <div className="text-sm font-bold text-zinc-500">{r.date}</div>
+                        {r.time ? <div className="text-xs font-semibold text-zinc-400">{r.time}</div> : null}
                       </div>
 
                       <div className="min-w-0 overflow-hidden">
                         <div className="truncate text-sm font-extrabold text-zinc-800">
-                          {r.requester}
+                          {r.entity}
                         </div>
                         <div className="truncate whitespace-nowrap text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">
-                          FROTA PARCEIRA
+                          {(r.entitySub || "FROTA PARCEIRA").toUpperCase()}
                         </div>
                       </div>
 
@@ -236,17 +300,19 @@ export default function GestorAuditModal({
                       </div>
 
                       <div>
-                        <div className="text-sm font-extrabold text-zinc-800">Kz {formatKz(r.amountKz)}</div>
+                        <div className="text-sm font-extrabold text-zinc-800">
+                          {typeof r.amount === "number" ? `Kz ${formatKz(r.amount)}` : "—"}
+                        </div>
                         <div className="text-xs font-semibold text-zinc-400">
-                          {r.liters} LITROS
+                          {typeof r.liters === "number" ? `${r.liters.toFixed(1)} LITROS` : "—"}
                         </div>
                       </div>
 
                       <div>
                         <span
-                          className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-widest ${statusBadge(r.status)}`}
+                          className={`inline-flex rounded-full border px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-widest ${statusBadge(r.normalized)}`}
                         >
-                          {statusLabel(r.status)}
+                          {r.statusLabel}
                         </span>
                       </div>
 
@@ -255,7 +321,7 @@ export default function GestorAuditModal({
                           <>
                             <button
                               type="button"
-                              onClick={() => approve(r)}
+                              onClick={() => approve()}
                               className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
                               title="Aprovar"
                             >
@@ -263,7 +329,7 @@ export default function GestorAuditModal({
                             </button>
                             <button
                               type="button"
-                              onClick={() => reject(r)}
+                              onClick={() => reject()}
                               className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-red-600 text-white hover:bg-red-700"
                               title="Rejeitar"
                             >
@@ -285,7 +351,7 @@ export default function GestorAuditModal({
                       );
                     })}
 
-                    {filtered.length === 0 ? (
+                    {!auditQuery.isLoading && !auditQuery.isError && rows.length === 0 ? (
                       <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-12 text-center">
                         <div className="text-sm font-semibold text-zinc-400">Nenhum registo encontrado.</div>
                       </div>

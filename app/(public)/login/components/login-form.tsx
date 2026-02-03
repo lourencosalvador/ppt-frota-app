@@ -8,16 +8,8 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
-import {
-  getDemoUserByEmail,
-  SESSION_STORAGE_KEY,
-  type DemoSession,
-  validateDemoCredentials,
-} from "@/app/lib/demo-auth";
-
-function sleep(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
+import { ApiError } from "@/app/lib/api/api-client";
+import { login } from "@/app/lib/api/auth";
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Insere um email válido."),
@@ -48,26 +40,19 @@ export default function LoginForm() {
     const password = values.password;
 
     setIsLoading(true);
-    await sleep(5000);
-
-    const ok = validateDemoCredentials(normalizedEmail, password);
-    if (!ok) {
+    try {
+      const session = await login(normalizedEmail, password);
+      toast.success("Sessão iniciada com sucesso.");
+      router.push(session.role === "admin" ? "/gestor" : session.role === "support" ? "/suporte" : "/home");
+    } catch (e) {
+      if (e instanceof ApiError) {
+        toast.error(e.message || "Falha ao iniciar sessão.");
+      } else {
+        toast.error("Falha ao iniciar sessão.");
+      }
+    } finally {
       setIsLoading(false);
-      toast.error("Email ou palavra-passe inválidos.");
-      return;
     }
-
-    const profile = getDemoUserByEmail(normalizedEmail);
-    const session: DemoSession = {
-      email: normalizedEmail,
-      name: profile?.name ?? normalizedEmail,
-      role: profile?.role ?? "client",
-      createdAt: Date.now(),
-    };
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-
-    toast.success("Sessão iniciada com sucesso.");
-    router.push(session.role === "admin" ? "/gestor" : session.role === "support" ? "/suporte" : "/home");
   }
 
   return (

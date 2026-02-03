@@ -3,12 +3,22 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { Check, X } from "lucide-react";
+
+import { ApiError } from "@/app/lib/api/api-client";
+import { signup } from "@/app/lib/api/auth";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 function hasUppercase(v: string) {
   return /[A-Z]/.test(v);
@@ -21,6 +31,7 @@ function hasNumberOrSpecial(v: string) {
 const signupSchema = z.object({
   nome: z.string().trim().min(2, "Insere o teu nome."),
   email: z.string().trim().toLowerCase().email("Insere um email válido."),
+  type: z.enum(["client", "gestor", "suporte"]),
   password: z
     .string()
     .min(6, "A palavra-passe deve ter no mínimo 6 caracteres.")
@@ -39,11 +50,12 @@ export default function SignupForm() {
     register,
     watch,
     handleSubmit,
+    control,
     formState: { errors, isValid },
   } = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
     mode: "onChange",
-    defaultValues: { nome: "", email: "", password: "" },
+    defaultValues: { nome: "", email: "", type: "client", password: "" },
   });
 
   const password = watch("password") ?? "";
@@ -69,13 +81,27 @@ export default function SignupForm() {
     return "bg-emerald-600";
   }, [progress]);
 
-  async function onSubmit() {
+  async function onSubmit(values: SignupValues) {
     if (isLoading) return;
     setIsLoading(true);
-    await new Promise<void>((r) => setTimeout(r, 700));
-    setIsLoading(false);
-    toast.success("Conta criada (modo demo). Já podes iniciar sessão.");
-    router.push("/");
+    try {
+      const session = await signup({
+        name: values.nome.trim(),
+        email: values.email.trim().toLowerCase(),
+        password: values.password,
+        type: values.type,
+      });
+      toast.success("Conta criada com sucesso.");
+      router.push(session.role === "admin" ? "/gestor" : session.role === "support" ? "/suporte" : "/home");
+    } catch (e) {
+      if (e instanceof ApiError) {
+        toast.error(e.message || "Falha ao criar conta.");
+      } else {
+        toast.error("Falha ao criar conta.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -123,6 +149,33 @@ export default function SignupForm() {
         {errors.email?.message ? (
           <div className="text-xs font-semibold text-red-600">{errors.email.message}</div>
         ) : null}
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-semibold text-zinc-700">Tipo de conta</label>
+        <Controller
+          control={control}
+          name="type"
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger className="h-12 rounded-2xl">
+                <SelectValue placeholder="Seleciona o tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="client">Cliente</SelectItem>
+                <SelectItem value="gestor">Gestor</SelectItem>
+                <SelectItem value="suporte">Suporte</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        />
+        {errors.type?.message ? (
+          <div className="text-xs font-semibold text-red-600">{errors.type.message}</div>
+        ) : (
+          <div className="text-xs font-semibold text-zinc-400">
+            Define o perfil para acesso aos módulos.
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">

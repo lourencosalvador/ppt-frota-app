@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist_Mono, Poppins } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
+import Providers from "@/app/providers";
 
 const brandSans = Poppins({
   variable: "--font-brand-sans",
@@ -29,7 +30,7 @@ export default function RootLayout({
       <body
         className={`${brandSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <Providers>{children}</Providers>
         <Toaster position="top-center" richColors closeButton />
       </body>
     </html>

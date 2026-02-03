@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Filter, Plus, Zap } from "lucide-react";
 import { toast } from "sonner";
 
@@ -9,6 +9,7 @@ import type { ManualFuelRecord } from "@/app/(client)/postos-parceiros/lib/mock-
 import GestorAuditModal from "@/app/(gestor)/gestor/postos-abastec/components/gestor-audit-modal";
 import GestorManualRefuelModal from "@/app/(gestor)/gestor/postos-abastec/components/gestor-manual-refuel-modal";
 import GestorStationCard from "@/app/(gestor)/gestor/postos-abastec/components/gestor-station-card";
+import { useStations } from "@/app/lib/api/stations-hooks";
 import {
   gestorStationsMock,
   type FuelFilter,
@@ -23,8 +24,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+function hashSeed(input: string) {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function demoFuelStatus(seed: number): FuelAvailability["status"] {
+  const r = seed % 100;
+  if (r < 70) return "OK";
+  if (r < 86) return "LIMITADO";
+  return "INDISPONIVEL";
+}
+
 export default function GestorPostosAbastecClient() {
   const [fuelFilter, setFuelFilter] = useState<FuelFilter>("TODOS");
+  const apiStationsQuery = useStations({ include_inactive: true });
   const [stations, setStations] = useState<GestorStation[]>(gestorStationsMock);
   const processedCreateIds = useRef<Set<string>>(new Set());
 
@@ -32,6 +50,34 @@ export default function GestorPostosAbastecClient() {
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
 
   const [manualOpen, setManualOpen] = useState(false);
+
+  useEffect(() => {
+    if (!apiStationsQuery.data?.length) return;
+    setStations((prev) => {
+      const prevById = new Map(prev.map((s) => [s.id, s]));
+      return apiStationsQuery.data.map((s) => {
+        const prevStation = prevById.get(s.id);
+        const base = hashSeed(s.id);
+        const fuels: FuelAvailability[] =
+          prevStation?.fuels ??
+          [
+            { fuel: "Diesel", status: demoFuelStatus(base + 1) },
+            { fuel: "Gasolina 95", status: demoFuelStatus(base + 7) },
+            { fuel: "AdBlue", status: demoFuelStatus(base + 13) },
+          ];
+
+        return {
+          id: s.id,
+          name: s.name,
+          city: s.city,
+          status: s.is_active ? "DISPONIVEL" : "INDISPONIVEL",
+          updatedLabel: prevStation?.updatedLabel ?? "Agora mesmo",
+          fuels,
+          auditHistory: prevStation?.auditHistory ?? [],
+        };
+      });
+    });
+  }, [apiStationsQuery.data]);
 
   const filteredStations = useMemo(() => {
     if (fuelFilter === "TODOS") return stations;
@@ -106,9 +152,8 @@ export default function GestorPostosAbastecClient() {
           setAuditOpen(v);
           if (!v) setSelectedStationId(null);
         }}
-        station={selectedStation}
-        records={selectedRecords}
-        onUpdateStatus={updateAuditStatus}
+        stationId={selectedStationId}
+        stationName={selectedStation?.name ?? null}
       />
 
       <GestorManualRefuelModal
@@ -161,6 +206,21 @@ export default function GestorPostosAbastecClient() {
             </Select>
           </div>
         </div>
+
+        {apiStationsQuery.isLoading ? (
+          <div className="mt-5 rounded-2xl border border-zinc-100/60 bg-white p-5 text-sm font-semibold text-zinc-500 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+              A carregar postos...
+            </span>
+          </div>
+        ) : null}
+
+        {apiStationsQuery.isError ? (
+          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-semibold text-red-700">
+            Falha ao carregar postos. Verifica a API e autenticação.
+          </div>
+        ) : null}
 
         <div className="mt-6 grid gap-5 lg:grid-cols-3">
           {filteredStations.map((s) => (

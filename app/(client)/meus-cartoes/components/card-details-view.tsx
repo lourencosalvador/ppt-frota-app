@@ -6,6 +6,7 @@ import {
   Cog,
   Download,
   Lock,
+  SlidersHorizontal,
   TrendingDown,
   TrendingUp,
   Wifi,
@@ -30,11 +31,13 @@ export default function CardDetailsView({
   onBack,
   onTopup,
   onAlert,
+  onLimits,
 }: {
   card: FrotaCard;
   onBack: () => void;
   onTopup: () => void;
   onAlert: () => void;
+  onLimits: () => void;
 }) {
   const isBlocked = Boolean(card.blocked);
 
@@ -76,8 +79,8 @@ export default function CardDetailsView({
             className={[
               "mt-4 rounded-2xl p-6 text-white shadow-[0_10px_40px_rgba(0,0,0,0.18)]",
               isBlocked
-                ? "bg-gradient-to-br from-zinc-500 via-zinc-600 to-zinc-700"
-                : "bg-gradient-to-br from-[#0B1220] via-[#0E2236] to-[#091423]",
+                ? "bg-linear-to-br from-zinc-500 via-zinc-600 to-zinc-700"
+                : "bg-linear-to-br from-[#0B1220] via-[#0E2236] to-[#091423]",
             ].join(" ")}
           >
             <div className="flex items-start justify-between">
@@ -136,8 +139,15 @@ export default function CardDetailsView({
                   {card.usagePercent}%
                 </div>
               </div>
-              <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-zinc-400">
-                <span>Limite: Kz {formatKz(card.limitKz)}</span>
+              <div className="mt-3 grid gap-2 text-[11px] font-semibold text-zinc-400 sm:grid-cols-2">
+                <div className="inline-flex items-center justify-between rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+                  <span>Diário</span>
+                  <span className="font-extrabold text-zinc-700">Kz {formatKz(card.dailyLimitKz)}</span>
+                </div>
+                <div className="inline-flex items-center justify-between rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+                  <span>Mensal</span>
+                  <span className="font-extrabold text-zinc-700">Kz {formatKz(card.monthlyLimitKz)}</span>
+                </div>
               </div>
             </div>
 
@@ -149,6 +159,15 @@ export default function CardDetailsView({
               >
                 <span className="text-lg leading-none">+</span>
                 Carregar Saldo
+              </Button>
+              <Button
+                variant="outline"
+                className="h-12 w-full gap-2 rounded-xl"
+                onClick={onLimits}
+                disabled={isBlocked}
+              >
+                <SlidersHorizontal className="h-4 w-4 text-zinc-600" />
+                Limites
               </Button>
               <Button
                 variant="outline"
@@ -166,7 +185,7 @@ export default function CardDetailsView({
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                  Limite mínimo
+                  Alerta de saldo (mínimo)
                 </div>
                 <div className="mt-1 text-sm font-extrabold text-zinc-900">
                   Kz {formatKz(card.minLimitKz)}

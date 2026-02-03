@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Filter, FileText, Zap } from "lucide-react";
 
-import type { FuelType } from "@/app/(client)/postos-parceiros/lib/mock-stations";
+import type { FuelAvailability, FuelType } from "@/app/(client)/postos-parceiros/lib/mock-stations";
 import type { ManualFuelRecord } from "@/app/(client)/postos-parceiros/lib/mock-history";
 import { toast } from "sonner";
 
@@ -11,6 +11,7 @@ import GestorStationCard from "@/app/(gestor)/gestor/postos-abastec/components/g
 import { supportStationsMock, type SupportStation } from "@/app/(suporte)/suporte/status-postos/lib/mock-support-stations";
 import SupportAuditModal from "@/app/(suporte)/suporte/status-postos/components/support-audit-modal";
 import SupportRegularizacaoModal from "@/app/(suporte)/suporte/status-postos/components/support-regularizacao-modal";
+import { useStations } from "@/app/lib/api/stations-hooks";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -22,12 +23,58 @@ import {
 
 type FuelFilter = "TODOS" | FuelType;
 
+function hashSeed(input: string) {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function demoFuelStatus(seed: number): FuelAvailability["status"] {
+  const r = seed % 100;
+  if (r < 74) return "OK";
+  if (r < 90) return "LIMITADO";
+  return "INDISPONIVEL";
+}
+
 export default function SuporteStatusPostosClient() {
   const [fuelFilter, setFuelFilter] = useState<FuelFilter>("TODOS");
   const [stations, setStations] = useState<SupportStation[]>(supportStationsMock);
   const [auditOpen, setAuditOpen] = useState(false);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
+
+  const apiStationsQuery = useStations({ include_inactive: true });
+
+  useEffect(() => {
+    if (!apiStationsQuery.data?.length) return;
+    setStations((prev) => {
+      const prevById = new Map(prev.map((s) => [s.id, s]));
+      return apiStationsQuery.data.map((s) => {
+        const prevStation = prevById.get(s.id);
+        const base = hashSeed(s.id);
+        const fuels: FuelAvailability[] =
+          prevStation?.fuels ??
+          [
+            { fuel: "Diesel", status: demoFuelStatus(base + 1) },
+            { fuel: "Gasolina 95", status: demoFuelStatus(base + 7) },
+            { fuel: "AdBlue", status: demoFuelStatus(base + 13) },
+          ];
+
+        return {
+          id: s.id,
+          name: s.name,
+          city: s.city,
+          status: s.is_active ? "DISPONIVEL" : "INDISPONIVEL",
+          updatedLabel: prevStation?.updatedLabel ?? "Agora mesmo",
+          fuels,
+          auditHistory: prevStation?.auditHistory ?? [],
+        };
+      });
+    });
+  }, [apiStationsQuery.data]);
 
   const filtered = useMemo(() => {
     if (fuelFilter === "TODOS") return stations;
@@ -38,11 +85,6 @@ export default function SuporteStatusPostosClient() {
     if (!selectedStationId) return null;
     return stations.find((s) => s.id === selectedStationId) ?? null;
   }, [stations, selectedStationId]);
-
-  const selectedRecords = useMemo<ManualFuelRecord[]>(() => {
-    if (!selectedStation) return [];
-    return selectedStation.auditHistory ?? [];
-  }, [selectedStation]);
 
   function openAudit(station: SupportStation) {
     setSelectedStationId(station.id);
@@ -86,12 +128,8 @@ export default function SuporteStatusPostosClient() {
           setAuditOpen(v);
           if (!v) setSelectedStationId(null);
         }}
+        stationId={selectedStationId}
         stationName={selectedStation?.name ?? null}
-        records={selectedRecords}
-        onUpdateStatus={({ recordId, status }) => {
-          if (!selectedStationId) return;
-          updateAuditStatus({ stationId: selectedStationId, recordId, status });
-        }}
       />
 
       <SupportRegularizacaoModal
@@ -145,6 +183,21 @@ export default function SuporteStatusPostosClient() {
             </Select>
           </div>
         </div>
+
+        {apiStationsQuery.isLoading ? (
+          <div className="mt-5 rounded-2xl border border-zinc-100/60 bg-white p-5 text-sm font-semibold text-zinc-500 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+              A carregar postos...
+            </span>
+          </div>
+        ) : null}
+
+        {apiStationsQuery.isError ? (
+          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-semibold text-red-700">
+            Falha ao carregar postos. Verifica a API e autenticação.
+          </div>
+        ) : null}
 
         <div className="mt-6 grid gap-5 lg:grid-cols-3">
           {filtered.map((s) => (

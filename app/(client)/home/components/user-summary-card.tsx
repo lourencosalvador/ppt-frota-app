@@ -1,5 +1,4 @@
-import Image from "next/image";
-import perfilImg from "@/app/assets/image/perfil.png";
+import InitialsAvatar from "@/components/ui/initials-avatar";
 
 export default function UserSummaryCard({
   todayLabel,
@@ -12,16 +11,7 @@ export default function UserSummaryCard({
     <section className="rounded-2xl border border-blue-100/10 bg-white p-6 shadow-[0_4px_20px_rgb(59,130,246,0.03)]">
       <div className="flex items-center justify-between gap-6">
         <div className="flex items-center gap-4">
-          <div className="relative h-12 w-12 overflow-hidden rounded-full border border-blue-100/30 bg-blue-600 shadow-sm">
-            <Image
-              src={perfilImg}
-              alt="Foto de perfil"
-              fill
-              sizes="48px"
-              className="object-cover"
-              priority
-            />
-          </div>
+          <InitialsAvatar name={name} size={48} className="border border-blue-100/30" />
           <div>
             <div className="text-[10px] font-bold tracking-widest text-zinc-400">
               {todayLabel}

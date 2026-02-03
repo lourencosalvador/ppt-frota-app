@@ -31,6 +31,8 @@ export default function PostoCard({
   station: PartnerStation;
   onOpenDetails: (station: PartnerStation) => void;
 }) {
+  const statusLabel = station.status === "DISPONIVEL" ? "DISPONÍVEL" : "INDISPONÍVEL";
+
   return (
     <div className="rounded-2xl border border-emerald-200/60 bg-white p-5 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
       <div className="flex items-start justify-between">
@@ -44,7 +46,7 @@ export default function PostoCard({
               statusBadge(station.status),
             ].join(" ")}
           >
-            DISPONÍVEL
+            {statusLabel}
           </span>
         </div>
 
