@@ -1,4 +1,4 @@
-import type { StatCard } from "@/app/(client)/home/lib/mock-data";
+import type { StatCard } from "@/app/(client)/home/lib/types";
 
 function getCardStyles(iconClass: string) {
   if (iconClass.includes("text-blue-700")) return "shadow-[0_4px_20px_rgb(59,130,246,0.04)] border-blue-100/10";

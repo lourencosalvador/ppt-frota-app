@@ -1,29 +1,20 @@
+"use client";
+
 import type { TicketStatus } from "@/app/(client)/meus-pedidos/lib/mock-tickets";
 
-function getStatusStyles(status: TicketStatus) {
-  switch (status) {
-    case "EM ANALISE":
-      return "bg-amber-50 text-amber-700 border-amber-100";
-    case "ABERTO":
-      return "bg-blue-50 text-blue-700 border-blue-100";
-    case "ATRIBUIDO":
-      return "bg-zinc-100 text-zinc-700 border-zinc-200";
-    case "APROVADO":
-      return "bg-emerald-50 text-emerald-700 border-emerald-100";
-    case "REJEITADO":
-      return "bg-red-50 text-red-700 border-red-100";
-    case "CONCLUIDO":
-      return "bg-violet-50 text-violet-700 border-violet-100";
-    default:
-      return "bg-zinc-50 text-zinc-700 border-zinc-100";
-  }
-}
+const statusConfig: Record<TicketStatus, { bg: string; text: string }> = {
+  "EM ANALISE": { bg: "bg-amber-50 border-amber-200", text: "text-amber-700" },
+  ABERTO: { bg: "bg-blue-50 border-blue-200", text: "text-blue-700" },
+  ATRIBUIDO: { bg: "bg-zinc-50 border-zinc-200", text: "text-zinc-700" },
+  APROVADO: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700" },
+  REJEITADO: { bg: "bg-red-50 border-red-200", text: "text-red-700" },
+  CONCLUIDO: { bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-700" },
+};
 
 export default function TicketStatusBadge({ status }: { status: TicketStatus }) {
+  const c = statusConfig[status] ?? statusConfig.ABERTO;
   return (
-    <span
-      className={`inline-block rounded-md border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getStatusStyles(status)}`}
-    >
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-extrabold ${c.bg} ${c.text}`}>
       {status}
     </span>
   );

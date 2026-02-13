@@ -1,4 +1,4 @@
-export type AppRole = "client" | "support" | "admin";
+export type AppRole = "admin" | "gestor" | "support" | "colaborador";
 
 export type AppSession = {
   email: string;

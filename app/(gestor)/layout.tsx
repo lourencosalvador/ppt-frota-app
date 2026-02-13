@@ -26,7 +26,7 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
           createdAt: Date.now(),
         };
         if (!mounted) return;
-        if (next.role !== "admin") {
+        if (next.role !== "gestor") {
           router.replace("/");
           return;
         }

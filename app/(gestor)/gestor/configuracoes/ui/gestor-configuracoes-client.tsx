@@ -1,15 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Banknote, Barcode, Building2, CreditCard, Landmark, Pencil, Plus, Settings, TicketPercent, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import type { ApiStation } from "@/app/lib/api/stations";
+import { ApiError } from "@/app/lib/api/api-client";
 import { useCreateStation, useStations } from "@/app/lib/api/stations-hooks";
-import { mockPaymentMethods, type PaymentMethod } from "@/app/(gestor)/gestor/configuracoes/lib/mock-config";
+import type { PaymentMethod } from "@/app/(gestor)/gestor/configuracoes/lib/mock-config";
 import StationModal from "@/app/(gestor)/gestor/configuracoes/components/station-modal";
+import EmptyState from "@/components/ui/empty-state";
+import ProfileSettings from "@/components/profile-settings";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
+const defaultPaymentMethods: PaymentMethod[] = [
+  { id: "pm1", name: "Referência Multibanco", description: "Pagamento via entidade e referência.", active: true },
+  { id: "pm2", name: "Transferência Bancária (IBAN)", description: "Validação manual mediante comprovativo.", active: true },
+  { id: "pm3", name: "Débito Direto (SEPA)", description: "Cobrança automática mensal.", active: false },
+  { id: "pm4", name: "Cheque Bancário", description: "Apenas presencial na sede.", active: false },
+];
 
 type SectionKey = "POSTOS" | "METODOS" | "NOTIFICACOES" | "PERFIS";
 
@@ -58,19 +68,29 @@ function iconForMethod(name: string) {
 
 export default function GestorConfiguracoesClient() {
   const [section, setSection] = useState<SectionKey>("POSTOS");
-  const [methods, setMethods] = useState<PaymentMethod[]>(mockPaymentMethods);
+  const [methods, setMethods] = useState<PaymentMethod[]>(defaultPaymentMethods);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ApiStation | null>(null);
+  const lastErrorRef = useRef<string | null>(null);
 
   const stationsQuery = useStations({ include_inactive: true });
   const createStation = useCreateStation();
+
+  useEffect(() => {
+    if (!stationsQuery.isError) return;
+    const err = stationsQuery.error;
+    const message = err instanceof ApiError ? err.message : "Falha ao carregar postos.";
+    if (lastErrorRef.current === message) return;
+    lastErrorRef.current = message;
+    toast.error(message);
+  }, [stationsQuery.error, stationsQuery.isError]);
 
   const title = useMemo(() => {
     if (section === "POSTOS") return { t: "Gestão de Postos Parceiros", s: "Adicione ou remova postos da rede autorizada." };
     if (section === "METODOS") return { t: "Métodos de Carregamento", s: "Controle quais opções de pagamento estão disponíveis para os clientes carregarem suas contas." };
     if (section === "NOTIFICACOES") return { t: "Notificações", s: "Preferências de comunicação (em breve)." };
-    return { t: "Perfis de Acesso", s: "Regras e permissões (em breve)." };
+    return { t: "Meu Perfil", s: "Atualiza o teu nome, email, senha e foto de perfil." };
   }, [section]);
 
   return (
@@ -122,11 +142,11 @@ export default function GestorConfiguracoesClient() {
               </button>
               <button
                 type="button"
-                disabled
-                className="flex w-full cursor-not-allowed items-center gap-3 rounded-xl px-4 py-3 text-sm font-extrabold text-zinc-300"
+                onClick={() => setSection("PERFIS")}
+                className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-extrabold ${sectionButton(section === "PERFIS")}`}
               >
-                <Settings className="h-4 w-4 text-zinc-200" />
-                Perfis de Acesso
+                <Settings className={`h-4 w-4 ${section === "PERFIS" ? "text-emerald-600" : "text-zinc-400"}`} />
+                Meu Perfil
               </button>
             </div>
           </div>
@@ -162,12 +182,6 @@ export default function GestorConfiguracoesClient() {
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
                       A carregar postos...
                     </span>
-                  </div>
-                ) : null}
-
-                {stationsQuery.isError ? (
-                  <div className="px-6 py-6 text-sm font-semibold text-red-700">
-                    Falha ao carregar postos. Verifica a API e autenticação.
                   </div>
                 ) : null}
 
@@ -224,10 +238,16 @@ export default function GestorConfiguracoesClient() {
                       </TableRow>
                     ))}
 
-                    {!stationsQuery.isLoading && !stationsQuery.isError && (stationsQuery.data?.length ?? 0) === 0 ? (
+                    {!stationsQuery.isLoading && (stationsQuery.data?.length ?? 0) === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="py-14 text-center">
-                          <div className="text-sm font-semibold text-zinc-400">Nenhum posto encontrado.</div>
+                        <TableCell colSpan={4} className="py-8">
+                          <EmptyState
+                            icon={Building2}
+                            title="Nenhum posto encontrado"
+                            description="Os postos parceiros vão aparecer aqui quando forem criados."
+                            actionLabel="Novo Posto"
+                            onAction={() => { setEditing(null); setModalOpen(true); }}
+                          />
                         </TableCell>
                       </TableRow>
                     ) : null}
@@ -291,6 +311,10 @@ export default function GestorConfiguracoesClient() {
                     );
                   })}
                 </div>
+              </div>
+            ) : section === "PERFIS" ? (
+              <div className="px-6 py-6">
+                <ProfileSettings />
               </div>
             ) : (
               <div className="px-6 py-16 text-center text-sm font-semibold text-zinc-400">

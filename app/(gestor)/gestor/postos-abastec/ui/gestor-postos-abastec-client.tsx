@@ -1,20 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Filter, Plus, Zap } from "lucide-react";
+import { Filter, Fuel, Plus, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import type { FuelAvailability, FuelType } from "@/app/(client)/postos-parceiros/lib/mock-stations";
 import type { ManualFuelRecord } from "@/app/(client)/postos-parceiros/lib/mock-history";
+import { ApiError } from "@/app/lib/api/api-client";
 import GestorAuditModal from "@/app/(gestor)/gestor/postos-abastec/components/gestor-audit-modal";
 import GestorManualRefuelModal from "@/app/(gestor)/gestor/postos-abastec/components/gestor-manual-refuel-modal";
 import GestorStationCard from "@/app/(gestor)/gestor/postos-abastec/components/gestor-station-card";
+import EmptyState from "@/components/ui/empty-state";
 import { useStations } from "@/app/lib/api/stations-hooks";
-import {
-  gestorStationsMock,
-  type FuelFilter,
-  type GestorStation,
-} from "@/app/(gestor)/gestor/postos-abastec/lib/mock-gestor-stations";
+import type { FuelFilter, GestorStation } from "@/app/(gestor)/gestor/postos-abastec/lib/mock-gestor-stations";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -43,13 +41,23 @@ function demoFuelStatus(seed: number): FuelAvailability["status"] {
 export default function GestorPostosAbastecClient() {
   const [fuelFilter, setFuelFilter] = useState<FuelFilter>("TODOS");
   const apiStationsQuery = useStations({ include_inactive: true });
-  const [stations, setStations] = useState<GestorStation[]>(gestorStationsMock);
+  const [stations, setStations] = useState<GestorStation[]>([]);
   const processedCreateIds = useRef<Set<string>>(new Set());
+  const lastErrorRef = useRef<string | null>(null);
 
   const [auditOpen, setAuditOpen] = useState(false);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
 
   const [manualOpen, setManualOpen] = useState(false);
+
+  useEffect(() => {
+    if (!apiStationsQuery.isError) return;
+    const err = apiStationsQuery.error;
+    const message = err instanceof ApiError ? err.message : "Falha ao carregar postos.";
+    if (lastErrorRef.current === message) return;
+    lastErrorRef.current = message;
+    toast.error(message);
+  }, [apiStationsQuery.error, apiStationsQuery.isError]);
 
   useEffect(() => {
     if (!apiStationsQuery.data?.length) return;
@@ -89,28 +97,9 @@ export default function GestorPostosAbastecClient() {
     return stations.find((s) => s.id === selectedStationId) ?? null;
   }, [stations, selectedStationId]);
 
-  const selectedRecords = useMemo<ManualFuelRecord[]>(() => {
-    if (!selectedStation) return [];
-    return selectedStation.auditHistory ?? [];
-  }, [selectedStation]);
-
   function openAudit(station: GestorStation) {
     setSelectedStationId(station.id);
     setAuditOpen(true);
-  }
-
-  function updateAuditStatus(args: { stationId: string; recordId: string; status: ManualFuelRecord["status"] }) {
-    setStations((prev) =>
-      prev.map((s) => {
-        if (s.id !== args.stationId) return s;
-        return {
-          ...s,
-          auditHistory: (s.auditHistory ?? []).map((r) =>
-            r.id === args.recordId ? { ...r, status: args.status } : r,
-          ),
-        };
-      }),
-    );
   }
 
   function createManualRecord(args: {
@@ -119,7 +108,6 @@ export default function GestorPostosAbastecClient() {
     record: ManualFuelRecord;
     fuel: FuelType;
   }) {
-    // Idempotência: se o submit disparar 2x (dev/strictmode/double click), não duplica.
     if (processedCreateIds.current.has(args.createId)) return;
     processedCreateIds.current.add(args.createId);
 
@@ -216,23 +204,26 @@ export default function GestorPostosAbastecClient() {
           </div>
         ) : null}
 
-        {apiStationsQuery.isError ? (
-          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-semibold text-red-700">
-            Falha ao carregar postos. Verifica a API e autenticação.
-          </div>
-        ) : null}
-
-        <div className="mt-6 grid gap-5 lg:grid-cols-3">
-          {filteredStations.map((s) => (
-            <GestorStationCard
-              key={`${s.id}-${s.auditHistory?.length ?? 0}`}
-              station={s}
-              onOpenAudit={openAudit}
+        {!apiStationsQuery.isLoading && filteredStations.length === 0 ? (
+          <div className="mt-6">
+            <EmptyState
+              icon={Fuel}
+              title="Nenhum posto encontrado"
+              description="Os postos da rede vão aparecer aqui assim que estiverem disponíveis na API."
             />
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="mt-6 grid gap-5 lg:grid-cols-3">
+            {filteredStations.map((s) => (
+              <GestorStationCard
+                key={`${s.id}-${s.auditHistory?.length ?? 0}`}
+                station={s}
+                onOpenAudit={openAudit}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
-

@@ -10,6 +10,7 @@ import {
   MapPinned,
   Settings,
   Ticket,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,10 +54,11 @@ export default function GestorSidebar({ session }: { session: AppSession }) {
 
         <nav className="mt-3 space-y-1">
           <NavItem href="/gestor" icon={LayoutGrid} label="Visão Geral" />
-          <NavItem href="/gestor/tickets" icon={Ticket} label="Gestão de Tickets" />
+          <NavItem href="/gestor/contas-cartoes" icon={CreditCard} label="Cartões & Movimentos" />
+          <NavItem href="/gestor/colaboradores" icon={Users} label="Colaboradores" />
+          <NavItem href="/gestor/tickets" icon={Ticket} label="Tickets de Suporte" />
           <NavItem href="/gestor/postos-abastec" icon={MapPinned} label="Postos & Abastec." />
           <NavItem href="/gestor/relatorios-kpis" icon={BarChart3} label="Relatórios & KPIs" />
-          <NavItem href="/gestor/contas-cartoes" icon={CreditCard} label="Contas & Cartões" />
         </nav>
 
         <div className="mt-8 px-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">

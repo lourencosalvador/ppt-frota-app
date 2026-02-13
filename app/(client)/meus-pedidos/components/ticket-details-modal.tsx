@@ -6,6 +6,7 @@ import { CalendarDays, Clock } from "lucide-react";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { TicketChat } from "@/components/tickets/ticket-chat";
 
 function statusLabel(status: Ticket["status"]) {
   switch (status) {
@@ -116,116 +117,124 @@ export default function TicketDetailsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[980px] overflow-hidden p-0 max-h-[90vh]">
-        <div className="flex max-h-[90vh] flex-col">
-          <div className="border-b border-zinc-100 py-5 pl-6 pr-16">
+      <DialogContent className="max-w-[980px] lg:max-w-6xl overflow-hidden p-0 max-h-[90vh] h-[90vh]">
+        <div className="flex h-full flex-col">
+          <div className="border-b border-zinc-100 py-5 pl-6 pr-16 shrink-0 bg-white">
             <DialogHeader className="border-0 px-0 py-0">
               <DialogTitle className="text-2xl font-extrabold">Detalhes do Ticket</DialogTitle>
             </DialogHeader>
           </div>
 
-          <div className="flex-1 overflow-auto px-6 py-5">
-          {!ticket ? (
-            <div className="text-sm font-semibold text-zinc-500">Sem dados.</div>
-          ) : (
-            <div className="space-y-5">
-              <div className="rounded-2xl border border-zinc-100 bg-white px-5 py-4">
-                <FieldRow label="CÓDIGO">{ticket.code}</FieldRow>
-                <FieldRow label="ASSUNTO">{ticket.subject}</FieldRow>
-                <FieldRow label="TIPO">{ticket.requestTypeLabel ?? ticket.type}</FieldRow>
-                <FieldRow label="SOLICITANTE">
-                  {ticket.requester} ({ticket.requesterRole})
-                </FieldRow>
-                <FieldRow label="PRIORIDADE">
-                  <span className="inline-flex items-center gap-2">
-                    <span className={`h-2.5 w-2.5 rounded-full ${priorityDotClass(ticket.priority)}`} />
-                    {ticket.priority}
-                  </span>
-                </FieldRow>
-                <FieldRow label="ESTADO">
-                  <span
-                    className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-extrabold ${statusPillClass(ticket.status)}`}
-                  >
-                    {statusLabel(ticket.status)}
-                  </span>
-                </FieldRow>
+          <div className="flex-1 overflow-hidden min-h-0">
+            <div className="grid grid-cols-1 lg:grid-cols-2 h-full divide-y lg:divide-y-0 lg:divide-x divide-zinc-100">
+              <div className="overflow-y-auto px-6 py-5 h-full bg-white">
+                {!ticket ? (
+                  <div className="text-sm font-semibold text-zinc-500">Sem dados.</div>
+                ) : (
+                  <div className="space-y-5">
+                    <div className="rounded-2xl border border-zinc-100 bg-white px-5 py-4">
+                      <FieldRow label="CÓDIGO">{ticket.code}</FieldRow>
+                      <FieldRow label="ASSUNTO">{ticket.subject}</FieldRow>
+                      <FieldRow label="TIPO">{ticket.requestTypeLabel ?? ticket.type}</FieldRow>
+                      <FieldRow label="SOLICITANTE">
+                        {ticket.requester} ({ticket.requesterRole})
+                      </FieldRow>
+                      <FieldRow label="PRIORIDADE">
+                        <span className="inline-flex items-center gap-2">
+                          <span className={`h-2.5 w-2.5 rounded-full ${priorityDotClass(ticket.priority)}`} />
+                          {ticket.priority}
+                        </span>
+                      </FieldRow>
+                      <FieldRow label="ESTADO">
+                        <span
+                          className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-extrabold ${statusPillClass(ticket.status)}`}
+                        >
+                          {statusLabel(ticket.status)}
+                        </span>
+                      </FieldRow>
+                    </div>
+
+                    <div className="rounded-2xl border border-zinc-100 bg-white px-5 py-5">
+                      <div className="text-base font-extrabold text-zinc-900">
+                        Acompanhamento / Follow-up
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr]">
+                        <div className="space-y-3">
+                          <div className="text-sm font-semibold text-zinc-500">Responsável:</div>
+                          <div className="inline-flex w-full items-center rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-extrabold text-zinc-800">
+                            {defaults.responsible}
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="text-sm font-semibold text-zinc-500">Última atualização:</div>
+                          <div className="inline-flex w-full items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-extrabold text-zinc-800">
+                            <CalendarDays className="h-4 w-4 text-zinc-500" />
+                            {defaults.lastUpdated || "—"}
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 lg:col-span-2">
+                          <div className="text-sm font-semibold text-zinc-500">Última ação realizada:</div>
+                          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-800">
+                            {defaults.lastAction || "—"}
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 lg:col-span-2">
+                          <div className="text-sm font-semibold text-zinc-500">Próxima ação prevista:</div>
+                          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-800">
+                            {defaults.nextAction || "—"}
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="text-sm font-semibold text-zinc-500">
+                            Data prevista da próxima ação:
+                          </div>
+                          <div className="inline-flex h-11 w-full items-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800">
+                            {defaults.nextDate || "—"}
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 lg:col-span-2">
+                          <div className="text-sm font-semibold text-zinc-500">Observações internas:</div>
+                          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-800">
+                            {defaults.notes || "—"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-zinc-100 bg-white px-5 py-5">
+                      <div className="text-base font-extrabold text-zinc-900">
+                        Histórico de Interações
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {defaults.history.map((h) => (
+                          <div key={h.id} className="flex items-center gap-3 text-sm font-semibold text-zinc-700">
+                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-50 text-zinc-600">
+                              <Clock className="h-4 w-4" />
+                            </span>
+                            <span className="text-zinc-500">{h.date}</span>
+                            <span className="text-zinc-300">-</span>
+                            <span className="min-w-0 truncate">{h.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="rounded-2xl border border-zinc-100 bg-white px-5 py-5">
-                <div className="text-base font-extrabold text-zinc-900">
-                  Acompanhamento / Follow-up
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr]">
-                  <div className="space-y-3">
-                    <div className="text-sm font-semibold text-zinc-500">Responsável:</div>
-                    <div className="inline-flex w-full items-center rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-extrabold text-zinc-800">
-                      {defaults.responsible}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="text-sm font-semibold text-zinc-500">Última atualização:</div>
-                    <div className="inline-flex w-full items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-extrabold text-zinc-800">
-                      <CalendarDays className="h-4 w-4 text-zinc-500" />
-                      {defaults.lastUpdated || "—"}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 lg:col-span-2">
-                    <div className="text-sm font-semibold text-zinc-500">Última ação realizada:</div>
-                    <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-800">
-                      {defaults.lastAction || "—"}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 lg:col-span-2">
-                    <div className="text-sm font-semibold text-zinc-500">Próxima ação prevista:</div>
-                    <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-800">
-                      {defaults.nextAction || "—"}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="text-sm font-semibold text-zinc-500">
-                      Data prevista da próxima ação:
-                    </div>
-                    <div className="inline-flex h-11 w-full items-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800">
-                      {defaults.nextDate || "—"}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 lg:col-span-2">
-                    <div className="text-sm font-semibold text-zinc-500">Observações internas:</div>
-                    <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm font-semibold text-zinc-800">
-                      {defaults.notes || "—"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-zinc-100 bg-white px-5 py-5">
-                <div className="text-base font-extrabold text-zinc-900">
-                  Histórico de Interações
-                </div>
-                <div className="mt-3 space-y-3">
-                  {defaults.history.map((h) => (
-                    <div key={h.id} className="flex items-center gap-3 text-sm font-semibold text-zinc-700">
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-zinc-50 text-zinc-600">
-                        <Clock className="h-4 w-4" />
-                      </span>
-                      <span className="text-zinc-500">{h.date}</span>
-                      <span className="text-zinc-300">-</span>
-                      <span className="min-w-0 truncate">{h.text}</span>
-                    </div>
-                  ))}
-                </div>
+              <div className="h-full flex flex-col overflow-hidden bg-zinc-50/30 p-4">
+                 <TicketChat ticketId={ticket?.id ?? "temp"} currentUserRole="gestor" />
               </div>
             </div>
-          )}
-        </div>
+          </div>
 
-          <div className="border-t border-zinc-100 bg-white px-6 py-5">
+          <div className="border-t border-zinc-100 bg-white px-6 py-5 shrink-0">
             <div className="flex items-center justify-end">
               <Button
                 type="button"
@@ -242,4 +251,3 @@ export default function TicketDetailsModal({
     </Dialog>
   );
 }
-

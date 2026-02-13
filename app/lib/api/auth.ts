@@ -17,9 +17,10 @@ export type AuthResponse = {
 
 export function mapUserTypeToRole(type: string): AppRole {
   const t = String(type || "").toLowerCase();
-  if (t === "admin" || t === "gestor") return "admin";
+  if (t === "admin" || t === "administrador") return "admin";
+  if (t === "gestor") return "gestor";
   if (t === "support" || t === "suporte") return "support";
-  return "client";
+  return "colaborador";
 }
 
 export function persistAuth(auth: AuthResponse) {

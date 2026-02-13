@@ -1,27 +1,19 @@
+"use client";
+
 import type { TicketPriority } from "@/app/(client)/meus-pedidos/lib/mock-tickets";
 
-function getPriorityStyles(priority: TicketPriority) {
-  switch (priority) {
-    case "Urgente":
-      return "text-red-600";
-    case "Alta":
-      return "text-orange-600";
-    case "Normal":
-      return "text-blue-600";
-    case "Baixa":
-      return "text-zinc-500";
-    default:
-      return "text-zinc-600";
-  }
-}
+const priorityConfig: Record<TicketPriority, { bg: string; text: string }> = {
+  Urgente: { bg: "bg-red-50 border-red-200", text: "text-red-700" },
+  Alta: { bg: "bg-orange-50 border-orange-200", text: "text-orange-700" },
+  Normal: { bg: "bg-zinc-50 border-zinc-200", text: "text-zinc-600" },
+  Baixa: { bg: "bg-blue-50 border-blue-200", text: "text-blue-700" },
+};
 
 export default function TicketPriorityBadge({ priority }: { priority: TicketPriority }) {
+  const c = priorityConfig[priority] ?? priorityConfig.Normal;
   return (
-    <div className="flex items-center gap-1.5">
-      <span className={`h-1.5 w-1.5 rounded-full ${getPriorityStyles(priority).replace('text-', 'bg-')}`} />
-      <span className={`text-xs font-semibold ${getPriorityStyles(priority)}`}>
-        {priority}
-      </span>
-    </div>
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-extrabold ${c.bg} ${c.text}`}>
+      {priority}
+    </span>
   );
 }

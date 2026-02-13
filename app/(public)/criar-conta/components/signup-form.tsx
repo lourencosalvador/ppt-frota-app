@@ -31,7 +31,7 @@ function hasNumberOrSpecial(v: string) {
 const signupSchema = z.object({
   nome: z.string().trim().min(2, "Insere o teu nome."),
   email: z.string().trim().toLowerCase().email("Insere um email válido."),
-  type: z.enum(["client", "gestor", "suporte"]),
+  type: z.enum(["colaborador", "gestor", "suporte"]),
   password: z
     .string()
     .min(6, "A palavra-passe deve ter no mínimo 6 caracteres.")
@@ -55,7 +55,7 @@ export default function SignupForm() {
   } = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
     mode: "onChange",
-    defaultValues: { nome: "", email: "", type: "client", password: "" },
+    defaultValues: { nome: "", email: "", type: "colaborador", password: "" },
   });
 
   const password = watch("password") ?? "";
@@ -92,7 +92,12 @@ export default function SignupForm() {
         type: values.type,
       });
       toast.success("Conta criada com sucesso.");
-      router.push(session.role === "admin" ? "/gestor" : session.role === "support" ? "/suporte" : "/home");
+      const dest =
+        session.role === "admin" ? "/admin"
+        : session.role === "gestor" ? "/gestor"
+        : session.role === "support" ? "/suporte"
+        : "/painel";
+      router.push(dest);
     } catch (e) {
       if (e instanceof ApiError) {
         toast.error(e.message || "Falha ao criar conta.");
@@ -162,9 +167,9 @@ export default function SignupForm() {
                 <SelectValue placeholder="Seleciona o tipo" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="client">Cliente</SelectItem>
-                <SelectItem value="gestor">Gestor</SelectItem>
-                <SelectItem value="suporte">Suporte</SelectItem>
+                <SelectItem value="colaborador">Colaborador (Motorista)</SelectItem>
+                <SelectItem value="gestor">Gestor da Frota</SelectItem>
+                <SelectItem value="suporte">Suporte Técnico</SelectItem>
               </SelectContent>
             </Select>
           )}

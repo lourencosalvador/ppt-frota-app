@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Filter, FileText, Zap } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FileText, Filter, Fuel, Zap } from "lucide-react";
+import { toast } from "sonner";
 
 import type { FuelAvailability, FuelType } from "@/app/(client)/postos-parceiros/lib/mock-stations";
 import type { ManualFuelRecord } from "@/app/(client)/postos-parceiros/lib/mock-history";
-import { toast } from "sonner";
-
+import { ApiError } from "@/app/lib/api/api-client";
+import EmptyState from "@/components/ui/empty-state";
 import GestorStationCard from "@/app/(gestor)/gestor/postos-abastec/components/gestor-station-card";
-import { supportStationsMock, type SupportStation } from "@/app/(suporte)/suporte/status-postos/lib/mock-support-stations";
+import type { SupportStation } from "@/app/(suporte)/suporte/status-postos/lib/mock-support-stations";
 import SupportAuditModal from "@/app/(suporte)/suporte/status-postos/components/support-audit-modal";
 import SupportRegularizacaoModal from "@/app/(suporte)/suporte/status-postos/components/support-regularizacao-modal";
 import { useStations } from "@/app/lib/api/stations-hooks";
@@ -41,12 +42,22 @@ function demoFuelStatus(seed: number): FuelAvailability["status"] {
 
 export default function SuporteStatusPostosClient() {
   const [fuelFilter, setFuelFilter] = useState<FuelFilter>("TODOS");
-  const [stations, setStations] = useState<SupportStation[]>(supportStationsMock);
+  const [stations, setStations] = useState<SupportStation[]>([]);
   const [auditOpen, setAuditOpen] = useState(false);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
+  const lastErrorRef = useRef<string | null>(null);
 
   const apiStationsQuery = useStations({ include_inactive: true });
+
+  useEffect(() => {
+    if (!apiStationsQuery.isError) return;
+    const err = apiStationsQuery.error;
+    const message = err instanceof ApiError ? err.message : "Falha ao carregar postos.";
+    if (lastErrorRef.current === message) return;
+    lastErrorRef.current = message;
+    toast.error(message);
+  }, [apiStationsQuery.error, apiStationsQuery.isError]);
 
   useEffect(() => {
     if (!apiStationsQuery.data?.length) return;
@@ -91,20 +102,6 @@ export default function SuporteStatusPostosClient() {
     setAuditOpen(true);
   }
 
-  function updateAuditStatus(args: { stationId: string; recordId: string; status: ManualFuelRecord["status"] }) {
-    setStations((prev) =>
-      prev.map((s) => {
-        if (s.id !== args.stationId) return s;
-        return {
-          ...s,
-          auditHistory: (s.auditHistory ?? []).map((r) =>
-            r.id === args.recordId ? { ...r, status: args.status } : r,
-          ),
-        };
-      }),
-    );
-  }
-
   function createManualRecord(args: { createId: string; stationId: string; record: ManualFuelRecord; fuel: FuelType }) {
     setStations((prev) =>
       prev.map((s) => {
@@ -113,7 +110,7 @@ export default function SuporteStatusPostosClient() {
           ...s,
           updatedLabel: "Agora mesmo",
           auditHistory: [args.record, ...(s.auditHistory ?? [])],
-          fuels: s.fuels.map((f) => (f.fuel === args.fuel ? { ...f, status: "OK" } : f)),
+          fuels: s.fuels.map((f) => (f.fuel === args.fuel ? { ...f, status: "OK" as const } : f)),
         };
       }),
     );
@@ -193,26 +190,29 @@ export default function SuporteStatusPostosClient() {
           </div>
         ) : null}
 
-        {apiStationsQuery.isError ? (
-          <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-semibold text-red-700">
-            Falha ao carregar postos. Verifica a API e autenticação.
-          </div>
-        ) : null}
-
-        <div className="mt-6 grid gap-5 lg:grid-cols-3">
-          {filtered.map((s) => (
-            <GestorStationCard
-              key={`${s.id}-${s.auditHistory?.length ?? 0}`}
-              station={s as any}
-              onOpenAudit={openAudit as any}
-              ctaLabel="GERIR ABASTECIMENTOS"
-              ctaVariant="outline"
-              showCount={false}
+        {!apiStationsQuery.isLoading && filtered.length === 0 ? (
+          <div className="mt-6">
+            <EmptyState
+              icon={Fuel}
+              title="Nenhum posto encontrado"
+              description="Os postos da rede vão aparecer aqui assim que estiverem disponíveis na API."
             />
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="mt-6 grid gap-5 lg:grid-cols-3">
+            {filtered.map((s) => (
+              <GestorStationCard
+                key={`${s.id}-${s.auditHistory?.length ?? 0}`}
+                station={s as any}
+                onOpenAudit={openAudit as any}
+                ctaLabel="GERIR ABASTECIMENTOS"
+                ctaVariant="outline"
+                showCount={false}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
-

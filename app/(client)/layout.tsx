@@ -26,7 +26,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           createdAt: Date.now(),
         };
         if (!mounted) return;
-        if (next.role !== "client") {
+        if (next.role !== "colaborador") {
           router.replace("/");
           return;
         }

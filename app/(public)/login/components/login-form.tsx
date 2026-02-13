@@ -43,7 +43,12 @@ export default function LoginForm() {
     try {
       const session = await login(normalizedEmail, password);
       toast.success("Sessão iniciada com sucesso.");
-      router.push(session.role === "admin" ? "/gestor" : session.role === "support" ? "/suporte" : "/home");
+      const dest =
+        session.role === "admin" ? "/admin"
+        : session.role === "gestor" ? "/gestor"
+        : session.role === "support" ? "/suporte"
+        : "/painel";
+      router.push(dest);
     } catch (e) {
       if (e instanceof ApiError) {
         toast.error(e.message || "Falha ao iniciar sessão.");

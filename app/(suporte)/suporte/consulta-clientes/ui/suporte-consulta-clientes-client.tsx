@@ -1,13 +1,41 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Building2, Copy, CreditCard, Mail, Phone, RotateCcw, Search, ShieldBan, User } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Building2, Copy, CreditCard, Mail, Phone, RotateCcw, Search, ShieldBan, User, Users } from "lucide-react";
 import { toast } from "sonner";
 
-import { supportClientsMock, type SupportClient, type SupportTicketStatus } from "@/app/(suporte)/suporte/consulta-clientes/lib/mock-support-clients";
+import { ApiError } from "@/app/lib/api/api-client";
+import { useCards } from "@/app/lib/api/cards-hooks";
+import { useTickets } from "@/app/lib/api/tickets-hooks";
+import { apiTicketToUi } from "@/app/(client)/meus-pedidos/lib/ticket-api-mapper";
+import type { ApiCard } from "@/app/lib/api/cards";
+import type { Ticket } from "@/app/(client)/meus-pedidos/lib/mock-tickets";
+import EmptyState from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import TicketStatusBadge from "@/app/(client)/meus-pedidos/components/ticket-status-badge";
+
+type DerivedClient = {
+  id: string;
+  name: string;
+  email: string;
+  company: string;
+  cards: Array<{
+    id: string;
+    masked: string;
+    validThru: string;
+    balanceKz: number;
+    status: "ACTIVE" | "BLOCKED";
+  }>;
+  totalBalance: number;
+};
+
+function parseKz(v: string | undefined | null): number {
+  if (!v) return 0;
+  const cleaned = v.replace(/[^\d.,\-]/g, "").replace(",", ".");
+  return Number(cleaned) || 0;
+}
 
 function formatKz(v: number) {
   return new Intl.NumberFormat("pt-AO", {
@@ -16,26 +44,72 @@ function formatKz(v: number) {
   }).format(v);
 }
 
-function statusPill(status: SupportTicketStatus) {
-  if (status === "ABERTO") return "bg-blue-50 text-blue-700 border-blue-100";
-  if (status === "APROVADO") return "bg-emerald-50 text-emerald-700 border-emerald-100";
-  if (status === "ATRIBUÍDO") return "bg-zinc-100 text-zinc-700 border-zinc-200";
-  return "bg-slate-100 text-slate-700 border-slate-200";
+function deriveClientsFromCards(cards: ApiCard[]): DerivedClient[] {
+  const grouped = new Map<string, { cards: ApiCard[]; totalBalance: number }>();
+  for (const card of cards) {
+    const key = card.company ?? card.id;
+    const balance = parseKz(card.current_balance);
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.cards.push(card);
+      existing.totalBalance += balance;
+    } else {
+      grouped.set(key, { cards: [card], totalBalance: balance });
+    }
+  }
+
+  return Array.from(grouped.entries()).map(([key, { cards: groupCards, totalBalance }]) => ({
+    id: key,
+    name: groupCards[0].company_name || "Cliente",
+    email: "",
+    company: groupCards[0].company_name || "Empresa",
+    cards: groupCards.map((c) => ({
+      id: c.id,
+      masked: `**** **** **** ${c.uid?.slice(-4) ?? "0000"}`,
+      validThru: c.expires_at ? new Date(c.expires_at).toLocaleDateString("pt-PT", { month: "2-digit", year: "2-digit" }) : "N/A",
+      balanceKz: parseKz(c.current_balance),
+      status: c.status === "active" ? "ACTIVE" as const : "BLOCKED" as const,
+    })),
+    totalBalance,
+  }));
 }
 
 export default function SuporteConsultaClientesClient() {
   const [q, setQ] = useState("");
-  const [selectedId, setSelectedId] = useState<string>(supportClientsMock[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState<string>("");
   const [blocked, setBlocked] = useState<Record<string, boolean>>({});
+  const lastErrorRef = useRef<string | null>(null);
+
+  const cardsQuery = useCards();
+  const ticketsQuery = useTickets({ page: 1, page_size: 50 });
+
+  useEffect(() => {
+    if (!cardsQuery.isError) return;
+    const err = cardsQuery.error;
+    const message = err instanceof ApiError ? err.message : "Falha ao carregar dados de clientes.";
+    if (lastErrorRef.current === message) return;
+    lastErrorRef.current = message;
+    toast.error(message);
+  }, [cardsQuery.error, cardsQuery.isError]);
+
+  const clients = useMemo<DerivedClient[]>(() => {
+    if (!cardsQuery.data) return [];
+    return deriveClientsFromCards(cardsQuery.data);
+  }, [cardsQuery.data]);
+
+  const recentTickets = useMemo<Ticket[]>(() => {
+    const list = ticketsQuery.data ?? [];
+    return list.map((t) => apiTicketToUi(t, "Cliente"));
+  }, [ticketsQuery.data]);
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
-    if (!query) return supportClientsMock;
-    return supportClientsMock.filter((c) => {
-      const blob = `${c.name} ${c.email} ${c.company} ${c.phone} ${c.nif}`.toLowerCase();
+    if (!query) return clients;
+    return clients.filter((c) => {
+      const blob = `${c.name} ${c.email} ${c.company}`.toLowerCase();
       return blob.includes(query);
     });
-  }, [q]);
+  }, [q, clients]);
 
   useEffect(() => {
     if (filtered.length === 0) return;
@@ -43,12 +117,12 @@ export default function SuporteConsultaClientesClient() {
     setSelectedId(filtered[0].id);
   }, [filtered, selectedId]);
 
-  const selected = useMemo<SupportClient | null>(() => {
-    return supportClientsMock.find((c) => c.id === selectedId) ?? null;
-  }, [selectedId]);
+  const selected = useMemo<DerivedClient | null>(() => {
+    return clients.find((c) => c.id === selectedId) ?? null;
+  }, [selectedId, clients]);
 
   const isBlocked = selected ? Boolean(blocked[selected.id]) : false;
-  const isActive = selected ? selected.isActive && !isBlocked : false;
+  const isActive = selected ? !isBlocked : false;
 
   return (
     <div className="mx-auto h-[calc(100dvh-128px)] w-full max-w-[1240px] overflow-hidden">
@@ -61,10 +135,19 @@ export default function SuporteConsultaClientesClient() {
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Nome, Email ou NIF..."
+              placeholder="Nome ou Empresa..."
               className="h-11 rounded-xl pl-10"
             />
           </div>
+
+          {cardsQuery.isLoading ? (
+            <div className="mt-5 text-sm font-semibold text-zinc-500">
+              <span className="inline-flex items-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+                A carregar clientes...
+              </span>
+            </div>
+          ) : null}
 
           <div className="mt-5 space-y-2">
             {filtered.map((c) => {
@@ -92,15 +175,19 @@ export default function SuporteConsultaClientesClient() {
                   </div>
                   <div className="min-w-0">
                     <div className="truncate text-sm font-extrabold text-zinc-900">{c.name}</div>
-                    <div className="truncate text-xs font-semibold text-zinc-400">{c.email}</div>
+                    <div className="truncate text-xs font-semibold text-zinc-400">{c.company}</div>
                   </div>
                 </button>
               );
             })}
 
-            {filtered.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-10 text-center">
-                <div className="text-sm font-semibold text-zinc-400">Nenhum cliente encontrado.</div>
+            {!cardsQuery.isLoading && filtered.length === 0 ? (
+              <div className="mt-4">
+                <EmptyState
+                  icon={Users}
+                  title="Nenhum cliente encontrado"
+                  description="Os clientes aparecerão aqui a partir dos dados de cartões da API."
+                />
               </div>
             ) : null}
           </div>
@@ -133,7 +220,6 @@ export default function SuporteConsultaClientesClient() {
                       >
                         {isActive ? "ATIVO" : "INATIVO"}
                       </span>
-                      <div className="text-xs font-semibold text-zinc-400">Cliente desde {selected.sinceYear}</div>
                     </div>
                   </div>
                 </div>
@@ -143,7 +229,7 @@ export default function SuporteConsultaClientesClient() {
                     type="button"
                     variant="outline"
                     className="h-10 rounded-xl border-zinc-200 bg-white font-extrabold text-zinc-700 hover:bg-zinc-50"
-                    onClick={() => toast.success("Reset de senha enviado (mock).")}
+                    onClick={() => toast.info("Reset de senha: integração com API em breve.")}
                   >
                     <RotateCcw className="h-4 w-4" />
                     Reset Senha
@@ -174,62 +260,36 @@ export default function SuporteConsultaClientesClient() {
               <div className="grid gap-4 lg:grid-cols-3">
                 <div className="rounded-2xl border border-zinc-100 bg-zinc-50/50 p-5">
                   <div className="inline-flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">
-                    <Mail className="h-4 w-4" /> Email
+                    <Building2 className="h-4 w-4" /> Empresa
                   </div>
-                  <div className="mt-2 text-sm font-extrabold text-zinc-900">{selected.email}</div>
+                  <div className="mt-2 text-sm font-extrabold text-zinc-900">{selected.company}</div>
                 </div>
                 <div className="rounded-2xl border border-zinc-100 bg-zinc-50/50 p-5">
                   <div className="inline-flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">
-                    <Phone className="h-4 w-4" /> Telefone
+                    <CreditCard className="h-4 w-4" /> Cartões
                   </div>
-                  <div className="mt-2 text-sm font-extrabold text-zinc-900">{selected.phone}</div>
+                  <div className="mt-2 text-sm font-extrabold text-zinc-900">{selected.cards.length} cartão(ões)</div>
                 </div>
                 <div className="rounded-2xl border border-zinc-100 bg-zinc-50/50 p-5">
                   <div className="inline-flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">
-                    <Building2 className="h-4 w-4" /> Empresa / NIF
+                    <Mail className="h-4 w-4" /> Saldo Total
                   </div>
-                  <div className="mt-2 truncate text-sm font-extrabold text-zinc-900">{selected.company}</div>
-                  <div className="mt-1 text-xs font-semibold text-zinc-400">{selected.nif}</div>
+                  <div className="mt-2 text-sm font-extrabold text-zinc-900">KZ {formatKz(selected.totalBalance)}</div>
                 </div>
               </div>
 
               {/* Account card */}
-              <div className="mt-6 overflow-hidden rounded-2xl bg-gradient-to-br from-[#0B1220] via-[#101a2e] to-[#0B1220] p-6 text-white shadow-[0_18px_60px_rgba(0,0,0,0.25)]">
+              <div className="mt-6 overflow-hidden rounded-2xl bg-linear-to-br from-[#0B1220] via-[#101a2e] to-[#0B1220] p-6 text-white shadow-[0_18px_60px_rgba(0,0,0,0.25)]">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <div className="inline-flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-white/70">
                       <CreditCard className="h-4 w-4 text-emerald-300" />
-                      {selected.account.label}
+                      CONTA PRINCIPAL
                     </div>
                     <div className="mt-2 text-3xl font-extrabold">
-                      KZ {formatKz(selected.account.balanceKz)}
+                      KZ {formatKz(selected.totalBalance)}
                     </div>
                     <div className="mt-1 text-xs font-semibold text-white/60">{selected.company}</div>
-                  </div>
-
-                  <div className="min-w-[240px]">
-                    <div className="text-[11px] font-extrabold uppercase tracking-widest text-white/60">
-                      IBAN para Carregamento
-                    </div>
-                    <div className="mt-2 inline-flex w-full items-center justify-between gap-3 rounded-xl bg-white/10 px-4 py-3">
-                      <div className="truncate text-sm font-extrabold text-white/90">{selected.account.iban}</div>
-                      <button
-                        type="button"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-white/80 hover:bg-white/15"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(selected.account.iban);
-                            toast.success("IBAN copiado.");
-                          } catch {
-                            toast.error("Não foi possível copiar.");
-                          }
-                        }}
-                        aria-label="Copiar IBAN"
-                        title="Copiar"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </button>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -301,28 +361,24 @@ export default function SuporteConsultaClientesClient() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selected.recentTickets.map((t) => (
+                      {recentTickets.slice(0, 10).map((t) => (
                         <TableRow key={t.id}>
                           <TableCell className="py-4">
-                            <div className="text-xs font-extrabold text-zinc-400">{t.id}</div>
+                            <div className="text-xs font-extrabold text-zinc-400">{t.code}</div>
                           </TableCell>
                           <TableCell className="py-4">
                             <div className="text-sm font-semibold text-zinc-700">{t.subject}</div>
                           </TableCell>
                           <TableCell className="py-4">
-                            <span
-                              className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest ${statusPill(t.status)}`}
-                            >
-                              {t.status}
-                            </span>
+                            <TicketStatusBadge status={t.status} />
                           </TableCell>
                           <TableCell className="py-4 text-right">
-                            <div className="text-sm font-semibold text-zinc-500">{t.date}</div>
+                            <div className="text-sm font-semibold text-zinc-500">{t.createdAt}</div>
                           </TableCell>
                         </TableRow>
                       ))}
 
-                      {selected.recentTickets.length === 0 ? (
+                      {recentTickets.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={4} className="py-12 text-center">
                             <div className="text-sm font-semibold text-zinc-400">Sem tickets recentes.</div>
@@ -340,4 +396,3 @@ export default function SuporteConsultaClientesClient() {
     </div>
   );
 }
-

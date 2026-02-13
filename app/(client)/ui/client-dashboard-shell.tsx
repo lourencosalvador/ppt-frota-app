@@ -8,10 +8,9 @@ import ClientSidebar from "@/app/(client)/ui/sidebar/client-sidebar";
 import ClientTopbar from "@/app/(client)/ui/topbar/client-topbar";
 
 const TITLE_BY_PATH: Record<string, string> = {
-  "/home": "Meu Painel",
-  "/meus-pedidos": "Meus Pedidos",
-  "/meus-cartoes": "Meus Cartões",
-  "/postos-parceiros": "Postos Parceiros",
+  "/painel": "Meu Painel",
+  "/meu-cartao": "Meu Cartão",
+  "/configuracoes": "Configurações",
 };
 
 export default function ClientDashboardShell({

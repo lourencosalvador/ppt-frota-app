@@ -6,8 +6,7 @@ import {
   CreditCard,
   LayoutGrid,
   LogOut,
-  MapPin,
-  ShoppingBag,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -46,14 +45,19 @@ export default function ClientSidebar({ session }: { session: AppSession }) {
 
       <div className="mt-8 flex-1 px-4">
         <div className="px-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-          Menu Cliente
+          Menu Colaborador
         </div>
 
         <nav className="mt-3 space-y-1">
-          <NavItem href="/home" icon={LayoutGrid} label="Meu Painel" />
-          <NavItem href="/meus-pedidos" icon={ShoppingBag} label="Meus Pedidos" />
-          <NavItem href="/meus-cartoes" icon={CreditCard} label="Meus Cartões" />
-          <NavItem href="/postos-parceiros" icon={MapPin} label="Postos Parceiros" />
+          <NavItem href="/painel" icon={LayoutGrid} label="Meu Painel" />
+          <NavItem href="/meu-cartao" icon={CreditCard} label="Meu Cartão" />
+        </nav>
+
+        <div className="mt-8 px-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+          SISTEMA
+        </div>
+        <nav className="mt-3 space-y-1">
+          <NavItem href="/configuracoes" icon={Settings} label="Configurações" />
         </nav>
       </div>
 
@@ -70,7 +74,7 @@ export default function ClientSidebar({ session }: { session: AppSession }) {
                 {session.name}
               </div>
               <div className="truncate text-[11px] font-semibold text-zinc-400">
-                CLIENTE
+                COLABORADOR
               </div>
             </div>
           </div>

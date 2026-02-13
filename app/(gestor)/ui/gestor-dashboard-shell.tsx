@@ -9,10 +9,11 @@ import ClientTopbar from "@/app/(client)/ui/topbar/client-topbar";
 
 const TITLE_BY_PATH: Record<string, string> = {
   "/gestor": "Visão Geral",
-  "/gestor/tickets": "Gestão de Tickets",
+  "/gestor/contas-cartoes": "Cartões & Movimentos",
+  "/gestor/colaboradores": "Colaboradores",
+  "/gestor/tickets": "Tickets de Suporte",
   "/gestor/postos-abastec": "Postos & Abastec.",
   "/gestor/relatorios-kpis": "Relatórios & KPIs",
-  "/gestor/contas-cartoes": "Contas & Cartões",
   "/gestor/configuracoes": "Configurações",
 };
 

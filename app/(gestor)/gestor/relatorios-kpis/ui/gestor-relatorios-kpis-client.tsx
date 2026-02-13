@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Banknote,
@@ -13,15 +13,12 @@ import {
   ReceiptText,
   ShieldCheck,
   TrendingUp,
-  Zap,
   Users,
+  Zap,
 } from "lucide-react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 
-import type { ReportsRange, TabKey, TopVehicleRow } from "@/app/(gestor)/gestor/relatorios-kpis/lib/mock-relatorios-kpis";
-import { abastecimentoMock, fuelEventsMock, kpiTemplates, operacionalMock, rangeLabel, securityMock } from "@/app/(gestor)/gestor/relatorios-kpis/lib/mock-relatorios-kpis";
-import { applyRange, averageCostPerVehicleKz, topVehiclesFromEvents } from "@/app/(gestor)/gestor/relatorios-kpis/lib/relatorios-utils";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -30,27 +27,63 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import EmptyState from "@/components/ui/empty-state";
 
-function badgeEfficiency(tag: TopVehicleRow["efficiency"]) {
+import { ApiError } from "@/app/lib/api/api-client";
+import { useReportsKpis } from "@/app/lib/api/dashboard-hooks";
+import { useDashboard } from "@/app/lib/api/dashboard-hooks";
+import type { ReportsPeriod, TopVehicleConsumption } from "@/app/lib/api/reports-kpis";
+import type { DashboardPeriod } from "@/app/lib/api/dashboard";
+
+type ReportsRange = "LAST_30" | "LAST_7" | "TODAY";
+type TabKey = "OPERACIONAL" | "ABASTECIMENTO" | "PERFORMANCE";
+
+function rangeLabel(range: ReportsRange) {
+  if (range === "TODAY") return "Hoje";
+  if (range === "LAST_7") return "Últimos 7 Dias";
+  return "Últimos 30 Dias";
+}
+
+function rangeToApiPeriod(range: ReportsRange): ReportsPeriod {
+  if (range === "LAST_7") return "week";
+  if (range === "LAST_30") return "month";
+  return "week";
+}
+
+type EfficiencyTag = "ALTO_CUSTO" | "EFICIENTE";
+
+type TopVehicleRow = {
+  matricula: string;
+  liters: number;
+  costKz: number;
+  efficiency: EfficiencyTag;
+};
+
+function parseNum(s: string | number | undefined | null): number {
+  if (s == null) return 0;
+  return Number(String(s).replace(/[^\d.,\-]/g, "").replace(",", ".")) || 0;
+}
+
+function mapApiVehicle(v: TopVehicleConsumption): TopVehicleRow {
+  const liters = parseNum(v.consumption_liters);
+  const cost = parseNum(v.total_cost);
+  const eff: EfficiencyTag = v.efficiency?.toUpperCase().includes("ALTO") ? "ALTO_CUSTO" : "EFICIENTE";
+  return { matricula: v.vehicle_registration, liters, costKz: cost, efficiency: eff };
+}
+
+function badgeEfficiency(tag: EfficiencyTag) {
   if (tag === "ALTO_CUSTO") return "bg-red-50 text-red-700 border-red-100";
   return "bg-emerald-50 text-emerald-700 border-emerald-100";
 }
 
-function labelEfficiency(tag: TopVehicleRow["efficiency"]) {
+function labelEfficiency(tag: EfficiencyTag) {
   return tag === "ALTO_CUSTO" ? "Alto Custo" : "Eficiente";
 }
 
 function kpiCardTheme(iconColor: string) {
-  // Borda colorida bem sutil + shadow leve para destacar do fundo branco (igual ao print)
-  if (iconColor.includes("text-emerald")) {
-    return "border-emerald-100/60 shadow-[0_6px_22px_rgba(16,185,129,0.06)]";
-  }
-  if (iconColor.includes("text-blue")) {
-    return "border-blue-100/60 shadow-[0_6px_22px_rgba(59,130,246,0.06)]";
-  }
-  if (iconColor.includes("text-violet")) {
-    return "border-violet-100/60 shadow-[0_6px_22px_rgba(139,92,246,0.06)]";
-  }
+  if (iconColor.includes("text-emerald")) return "border-emerald-100/60 shadow-[0_6px_22px_rgba(16,185,129,0.06)]";
+  if (iconColor.includes("text-blue")) return "border-blue-100/60 shadow-[0_6px_22px_rgba(59,130,246,0.06)]";
+  if (iconColor.includes("text-violet")) return "border-violet-100/60 shadow-[0_6px_22px_rgba(139,92,246,0.06)]";
   return "border-zinc-200/70 shadow-[0_6px_22px_rgba(15,23,42,0.04)]";
 }
 
@@ -60,10 +93,6 @@ function formatKz(v: number) {
 
 function formatKz2(v: number) {
   return new Intl.NumberFormat("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
-}
-
-function formatCompactKz(v: number) {
-  return new Intl.NumberFormat("pt-AO", { maximumFractionDigits: 0 }).format(v);
 }
 
 function tabAccent(tab: TabKey) {
@@ -76,39 +105,106 @@ export default function GestorRelatoriosKpisClient() {
   const [tab, setTab] = useState<TabKey>("PERFORMANCE");
   const [range, setRange] = useState<ReportsRange>("LAST_30");
   const [exporting, setExporting] = useState<"xlsx" | "pdf" | null>(null);
+  const lastErrorRef = useRef<string | null>(null);
 
-  const now = useMemo(() => new Date(Date.UTC(2026, 0, 25, 12, 0, 0)), []);
-  const filteredEvents = useMemo(() => applyRange(fuelEventsMock, range, now), [range, now]);
-  const topVehicles = useMemo(() => topVehiclesFromEvents(filteredEvents), [filteredEvents]);
+  const apiPeriod = rangeToApiPeriod(range);
+  const reportsQuery = useReportsKpis(apiPeriod);
+  const dashboardQuery = useDashboard(apiPeriod as DashboardPeriod);
 
-  const abastecimentoComputed = useMemo(() => {
-    const totalLiters = filteredEvents.reduce((acc, e) => acc + e.liters, 0);
-    const totalKz = filteredEvents.reduce((acc, e) => acc + e.costKz, 0);
-    const costPerLiter = totalLiters > 0 ? totalKz / totalLiters : 0;
-    return {
-      totalLiters,
-      costPerLiter,
-      manualRatePct: abastecimentoMock.kpis.manualRatePct,
-      irregularities: abastecimentoMock.kpis.irregularities,
-    };
-  }, [filteredEvents]);
+  useEffect(() => {
+    if (!reportsQuery.isError) return;
+    const err = reportsQuery.error;
+    const message = err instanceof ApiError ? err.message : "Falha ao carregar relatórios e KPIs.";
+    if (lastErrorRef.current === message) return;
+    lastErrorRef.current = message;
+    toast.error(message);
+  }, [reportsQuery.error, reportsQuery.isError]);
 
+  // ── Performance KPIs from /reports-kpis/ ──
   const computedKpis = useMemo(() => {
-    const avg = averageCostPerVehicleKz(filteredEvents);
-    const avgRounded = Math.round(avg || 0);
-
-    // mocks "inteligentes" baseados nos eventos filtrados
-    const savings = Math.round((filteredEvents.length || 1) * 145);
-    const fraudReduction = Math.min(35, 10 + Math.round((filteredEvents.length || 0) * 1.2));
-    const activeDrivers = 32 + Math.min(18, new Set(filteredEvents.map((e) => e.matricula)).size * 5);
-
+    if (!reportsQuery.data) return [];
+    const pk = reportsQuery.data.performance_kpis;
     return [
-      { ...kpiTemplates[0], value: `KZ ${avgRounded || 210}` },
-      { ...kpiTemplates[1], value: `KZ ${savings || 1450}` },
-      { ...kpiTemplates[2], value: `${fraudReduction || 15}%` },
-      { ...kpiTemplates[3], value: `${activeDrivers || 42}` },
+      {
+        title: "Custo Médio/Viatura",
+        value: pk.average_cost_per_vehicle || "—",
+        subtitle: undefined as string | undefined,
+        icon: Banknote,
+        iconBg: "bg-zinc-50",
+        iconColor: "text-zinc-700",
+      },
+      {
+        title: "Poupança Estimada",
+        value: pk.estimated_savings || "—",
+        subtitle: pk.savings_label || "Controlo otimizado",
+        icon: TrendingUp,
+        iconBg: "bg-emerald-50",
+        iconColor: "text-emerald-700",
+      },
+      {
+        title: "Redução Fraude",
+        value: pk.fraud_reduction || "—",
+        subtitle: undefined as string | undefined,
+        icon: ShieldCheck,
+        iconBg: "bg-blue-50",
+        iconColor: "text-blue-700",
+      },
+      {
+        title: "Motoristas Ativos",
+        value: String(pk.active_drivers ?? "—"),
+        subtitle: undefined as string | undefined,
+        icon: Users,
+        iconBg: "bg-violet-50",
+        iconColor: "text-violet-700",
+      },
     ];
-  }, [filteredEvents]);
+  }, [reportsQuery.data]);
+
+  // ── Top vehicles from /reports-kpis/ ──
+  const topVehicles = useMemo<TopVehicleRow[]>(() => {
+    if (!reportsQuery.data?.top_vehicles_consumption?.length) return [];
+    return reportsQuery.data.top_vehicles_consumption.map(mapApiVehicle);
+  }, [reportsQuery.data]);
+
+  // ── Security data from /reports-kpis/ ──
+  const securityData = useMemo(() => {
+    if (!reportsQuery.data) return null;
+    const sa = reportsQuery.data.security_activity;
+    return {
+      approvals: sa.manager_approvals,
+      approvalsSubtitle: "Tickets processados",
+      alerts: sa.uncommon_alerts,
+      alertsSubtitle: "Tentativas fora de padrão/horário",
+      auditStatusTitle: sa.audit_status_label || "Sistema Ativo",
+      auditStatusSubtitle: sa.last_integrity_check || "—",
+    };
+  }, [reportsQuery.data]);
+
+  // ── Dashboard data for Operacional tab ──
+  const operacionalKpis = useMemo(() => {
+    if (!dashboardQuery.data) return null;
+    const d = dashboardQuery.data;
+    return {
+      totalTickets: (d.critical_tickets ?? 0) + (d.in_analysis_tickets ?? 0) + (d.resolved_this_month ?? 0),
+      criticalTickets: d.critical_tickets ?? 0,
+      inAnalysis: d.in_analysis_tickets ?? 0,
+      resolved: d.resolved_this_month ?? 0,
+      avgAnalysisTime: d.average_analysis_time || "—",
+      approvalRate: d.approval_rate || "—",
+    };
+  }, [dashboardQuery.data]);
+
+  const volumeDistribution = useMemo(() => {
+    if (!dashboardQuery.data?.volume_distribution?.length) return [];
+    return dashboardQuery.data.volume_distribution.map((d) => ({
+      status: d.status,
+      value: d.count,
+      color: d.status.toUpperCase().includes("ABERTO") ? "#3b82f6"
+        : d.status.toUpperCase().includes("CONCLU") || d.status.toUpperCase().includes("APROVADO") ? "#10b981"
+        : d.status.toUpperCase().includes("REJEIT") || d.status.toUpperCase().includes("ATRASADO") ? "#ef4444"
+        : "#f59e0b",
+    }));
+  }, [dashboardQuery.data]);
 
   const tabs = useMemo(() => {
     return [
@@ -196,6 +292,8 @@ export default function GestorRelatoriosKpisClient() {
     }
   }
 
+  const isLoading = reportsQuery.isLoading || dashboardQuery.isLoading;
+
   return (
     <div className="w-full">
       <div className="mx-auto w-full max-w-[1240px] space-y-6">
@@ -248,6 +346,15 @@ export default function GestorRelatoriosKpisClient() {
           </div>
         </div>
 
+        {isLoading ? (
+          <div className="rounded-2xl border border-zinc-100/60 bg-white p-6 text-sm font-semibold text-zinc-500 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+              A carregar relatórios...
+            </span>
+          </div>
+        ) : null}
+
         {/* Tabs card */}
         <div className="rounded-2xl border border-zinc-100/60 bg-white shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
           <div className="border-b border-zinc-100 px-6">
@@ -280,220 +387,11 @@ export default function GestorRelatoriosKpisClient() {
           <div className="px-6 py-6">
             {tab === "ABASTECIMENTO" ? (
               <div className="space-y-7">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Fuel className="h-5 w-5 text-emerald-600" />
-                    <div className="text-sm font-extrabold text-zinc-900">KPIs de Abastecimento</div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="rounded-2xl border border-emerald-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(16,185,129,0.06)]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs font-bold text-zinc-500">Consumo Total</div>
-                          <div className="mt-2 text-2xl font-extrabold text-zinc-900">
-                            {Math.round(abastecimentoComputed.totalLiters).toLocaleString("pt-AO")} L
-                          </div>
-                        </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-                          <Fuel className="h-5 w-5" />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-blue-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(59,130,246,0.06)]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs font-bold text-zinc-500">Custo Médio/L</div>
-                          <div className="mt-2 text-2xl font-extrabold text-zinc-900">
-                            KZ {formatKz2(abastecimentoComputed.costPerLiter || 1.62)}
-                          </div>
-                        </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-                          <TrendingUp className="h-5 w-5" />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-violet-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(139,92,246,0.06)]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs font-bold text-zinc-500">Abast. Manuais</div>
-                          <div className="mt-2 text-2xl font-extrabold text-zinc-900">
-                            {abastecimentoComputed.manualRatePct}%
-                          </div>
-                          <div className="mt-1 text-xs font-semibold text-zinc-400">Taxa de Autorização</div>
-                        </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
-                          <ShieldCheck className="h-5 w-5" />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-red-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(239,68,68,0.06)]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs font-bold text-zinc-500">Irregularidades</div>
-                          <div className="mt-2 text-2xl font-extrabold text-zinc-900">
-                            {abastecimentoComputed.irregularities}
-                          </div>
-                          <div className="mt-1 text-xs font-semibold text-zinc-400">Regularizações necessárias</div>
-                        </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600">
-                          <AlertTriangle className="h-5 w-5" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                  <div className="rounded-2xl border border-zinc-100/60 bg-white p-6 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
-                    <div className="text-sm font-extrabold text-zinc-900">Tendência de Consumo (7 Dias)</div>
-                    <div className="mt-4 h-[220px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={abastecimentoMock.consumptionTrend7d} margin={{ left: 0, right: 0, top: 10, bottom: 0 }}>
-                          <defs>
-                            <linearGradient id="fillCons" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.20} />
-                              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid vertical={false} stroke="#eef2f7" strokeDasharray="4 4" />
-                          <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: "#a1a1aa", fontSize: 11, fontWeight: 700 }} />
-                          <Tooltip
-                            cursor={{ stroke: "#e4e4e7", strokeWidth: 1 }}
-                            contentStyle={{ borderRadius: 12, borderColor: "#e4e4e7", fontWeight: 700, fontSize: 12 }}
-                          />
-                          <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2.5} fill="url(#fillCons)" activeDot={{ r: 5 }} />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-zinc-100/60 bg-white p-6 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
-                    <div className="text-sm font-extrabold text-zinc-900">Top Postos (Volume)</div>
-                    <div className="mt-4 space-y-3">
-                      {abastecimentoMock.topStations.map((s) => (
-                        <div key={s.rank} className="flex items-center justify-between rounded-xl bg-zinc-50/60 px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-zinc-100 text-[11px] font-extrabold text-zinc-600">
-                              {s.rank}
-                            </div>
-                            <div className="text-sm font-extrabold text-zinc-800">{s.name}</div>
-                          </div>
-                          <div className="text-sm font-extrabold text-emerald-700">{s.liters} L</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t border-zinc-100 pt-6">
-                  <div className="flex items-center gap-2">
-                    <FileSpreadsheet className="h-5 w-5 text-violet-600" />
-                    <div className="text-sm font-extrabold text-zinc-900">Carregamento de Contas</div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
-                    <div className="rounded-2xl border border-zinc-100/60 bg-white p-6 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
-                      <div className="text-sm font-extrabold text-zinc-900">Métodos Utilizados</div>
-                      <div className="mt-4 h-[190px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={abastecimentoMock.topupMethods}
-                              dataKey="value"
-                              nameKey="name"
-                              innerRadius={58}
-                              outerRadius={84}
-                              paddingAngle={3}
-                              stroke="transparent"
-                            >
-                              {abastecimentoMock.topupMethods.map((m) => (
-                                <Cell key={m.name} fill={m.color} />
-                              ))}
-                            </Pie>
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div className="mt-4 space-y-2">
-                        {abastecimentoMock.topupMethods.map((m) => (
-                          <div key={m.name} className="flex items-center justify-between text-xs font-bold text-zinc-500">
-                            <span className="inline-flex items-center gap-2">
-                              <span className="h-2.5 w-2.5 rounded-full" style={{ background: m.color }} />
-                              {m.name}
-                            </span>
-                            <span className="text-zinc-700">{m.value}%</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                        <div className="rounded-2xl border border-emerald-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(16,185,129,0.06)]">
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <div className="text-xs font-bold text-zinc-500">Total Carregado</div>
-                              <div className="mt-2 text-2xl font-extrabold text-zinc-900">
-                                KZ {formatCompactKz(abastecimentoMock.topupKpis.totalLoadedKz)}
-                              </div>
-                            </div>
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-                              <Banknote className="h-5 w-5" />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-2xl border border-blue-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(59,130,246,0.06)]">
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <div className="text-xs font-bold text-zinc-500">Tempo Médio Atualiz.</div>
-                              <div className="mt-2 text-2xl font-extrabold text-zinc-900">
-                                {abastecimentoMock.topupKpis.avgUpdateMinutes} min
-                              </div>
-                            </div>
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-                              <Clock className="h-5 w-5" />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-2xl border border-amber-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(245,158,11,0.08)]">
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <div className="text-xs font-bold text-zinc-500">Pendentes Conf.</div>
-                              <div className="mt-2 text-2xl font-extrabold text-zinc-900">
-                                {abastecimentoMock.topupKpis.pendingConfirmations}
-                              </div>
-                            </div>
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
-                              <AlertTriangle className="h-5 w-5" />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-zinc-100/60 bg-white p-6 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
-                        <div className="text-sm font-extrabold text-zinc-900">Fluxo de Caixa (Carregamentos)</div>
-                        <div className="mt-4 h-[210px] w-full">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={abastecimentoMock.cashFlow} margin={{ left: 0, right: 0, top: 10, bottom: 0 }}>
-                              <CartesianGrid vertical={false} stroke="#eef2f7" strokeDasharray="4 4" />
-                              <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#a1a1aa", fontSize: 11, fontWeight: 700 }} />
-                              <Tooltip
-                                cursor={{ fill: "rgba(15,23,42,0.03)" }}
-                                contentStyle={{ borderRadius: 12, borderColor: "#e4e4e7", fontWeight: 700, fontSize: 12 }}
-                              />
-                              <Bar dataKey="value" fill="#8b5cf6" radius={[10, 10, 10, 10]} />
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <EmptyState
+                  icon={Fuel}
+                  title="Dados de abastecimento em integração"
+                  description="Os KPIs de abastecimento, tendências de consumo e carregamento de contas serão populados à medida que a API dedicada for integrada."
+                />
               </div>
             ) : tab === "OPERACIONAL" ? (
               <div className="space-y-7">
@@ -503,189 +401,134 @@ export default function GestorRelatoriosKpisClient() {
                     <div className="text-sm font-extrabold text-zinc-900">KPIs de Tickets &amp; Solicitações</div>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="rounded-2xl border border-blue-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(59,130,246,0.06)]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs font-bold text-zinc-500">Total Tickets</div>
-                          <div className="mt-2 text-2xl font-extrabold text-zinc-900">{operacionalMock.ticketsKpis.totalTickets}</div>
-                          <div className="mt-1 text-xs font-semibold text-zinc-400">No período selecionado</div>
-                        </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-                          <TrendingUp className="h-5 w-5" />
+                  {operacionalKpis ? (
+                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="rounded-2xl border border-blue-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(59,130,246,0.06)]">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-xs font-bold text-zinc-500">Total Tickets</div>
+                            <div className="mt-2 text-2xl font-extrabold text-zinc-900">{operacionalKpis.totalTickets}</div>
+                            <div className="mt-1 text-xs font-semibold text-zinc-400">No período selecionado</div>
+                          </div>
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                            <TrendingUp className="h-5 w-5" />
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="rounded-2xl border border-amber-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(245,158,11,0.08)]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs font-bold text-zinc-500">Tempo Médio Resol.</div>
-                          <div className="mt-2 text-2xl font-extrabold text-zinc-900">{operacionalMock.ticketsKpis.avgResolutionHours}h</div>
-                          <div className="mt-1 text-xs font-semibold text-zinc-400">Meta: &lt; 8h</div>
-                        </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
-                          <Clock className="h-5 w-5" />
+                      <div className="rounded-2xl border border-amber-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(245,158,11,0.08)]">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-xs font-bold text-zinc-500">Tempo Médio Análise</div>
+                            <div className="mt-2 text-2xl font-extrabold text-zinc-900">{operacionalKpis.avgAnalysisTime}</div>
+                            <div className="mt-1 text-xs font-semibold text-zinc-400">Meta: &lt; 8h</div>
+                          </div>
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+                            <Clock className="h-5 w-5" />
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="rounded-2xl border border-red-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(239,68,68,0.06)]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs font-bold text-zinc-500">Reabertos</div>
-                          <div className="mt-2 text-2xl font-extrabold text-zinc-900">{operacionalMock.ticketsKpis.reopened}</div>
-                          <div className="mt-1 text-xs font-semibold text-zinc-400">Controlo de qualidade</div>
-                        </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600">
-                          <AlertTriangle className="h-5 w-5" />
+                      <div className="rounded-2xl border border-red-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(239,68,68,0.06)]">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-xs font-bold text-zinc-500">Tickets Críticos</div>
+                            <div className="mt-2 text-2xl font-extrabold text-zinc-900">{operacionalKpis.criticalTickets}</div>
+                            <div className="mt-1 text-xs font-semibold text-zinc-400">Atenção imediata</div>
+                          </div>
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600">
+                            <AlertTriangle className="h-5 w-5" />
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="rounded-2xl border border-violet-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(139,92,246,0.06)]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs font-bold text-zinc-500">Alertas Postos</div>
-                          <div className="mt-2 text-2xl font-extrabold text-zinc-900">{operacionalMock.ticketsKpis.stationAlerts}</div>
-                          <div className="mt-1 text-xs font-semibold text-zinc-400">Indisponibilidade rede</div>
-                        </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
-                          <Zap className="h-5 w-5" />
+                      <div className="rounded-2xl border border-emerald-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(16,185,129,0.06)]">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-xs font-bold text-zinc-500">Resolvidos (Mês)</div>
+                            <div className="mt-2 text-2xl font-extrabold text-zinc-900">{operacionalKpis.resolved}</div>
+                            <div className="mt-1 text-xs font-semibold text-zinc-400">Taxa: {operacionalKpis.approvalRate}</div>
+                          </div>
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                            <Zap className="h-5 w-5" />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="mt-4 text-sm font-semibold text-zinc-400">Sem dados de tickets disponíveis.</div>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                  <div className="rounded-2xl border border-zinc-100/60 bg-white p-6 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
-                    <div className="text-sm font-extrabold text-zinc-900">Tickets por Estado</div>
-                    <div className="mt-4 h-[220px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={operacionalMock.ticketsByStatus}
-                          layout="vertical"
-                          margin={{ left: 0, right: 10, top: 10, bottom: 0 }}
-                        >
-                          <CartesianGrid horizontal={false} stroke="#eef2f7" strokeDasharray="4 4" />
-                          <XAxis type="number" hide />
-                          <YAxis
-                            type="category"
-                            dataKey="status"
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fill: "#71717a", fontSize: 12, fontWeight: 700 }}
-                            width={90}
-                          />
-                          <Tooltip
-                            cursor={{ fill: "rgba(15,23,42,0.03)" }}
-                            contentStyle={{ borderRadius: 12, borderColor: "#e4e4e7", fontWeight: 700, fontSize: 12 }}
-                          />
-                          <Bar dataKey="value" radius={[10, 10, 10, 10]}>
-                            {operacionalMock.ticketsByStatus.map((s) => (
-                              <Cell key={s.status} fill={s.color} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-zinc-100/60 bg-white p-6 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
-                    <div className="text-sm font-extrabold text-zinc-900">Distribuição por Prioridade</div>
-                    <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_220px] lg:items-center">
-                      <div className="h-[220px] w-full">
+                {volumeDistribution.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <div className="rounded-2xl border border-zinc-100/60 bg-white p-6 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+                      <div className="text-sm font-extrabold text-zinc-900">Tickets por Estado</div>
+                      <div className="mt-4 h-[220px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={operacionalMock.priorityDistribution}
-                              dataKey="value"
-                              nameKey="name"
-                              innerRadius={62}
-                              outerRadius={92}
-                              paddingAngle={3}
-                              stroke="transparent"
-                            >
-                              {operacionalMock.priorityDistribution.map((p) => (
-                                <Cell key={p.name} fill={p.color} />
+                          <BarChart data={volumeDistribution} layout="vertical" margin={{ left: 0, right: 10, top: 10, bottom: 0 }}>
+                            <CartesianGrid horizontal={false} stroke="#eef2f7" strokeDasharray="4 4" />
+                            <XAxis type="number" hide />
+                            <YAxis
+                              type="category"
+                              dataKey="status"
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fill: "#71717a", fontSize: 12, fontWeight: 700 }}
+                              width={90}
+                            />
+                            <Tooltip
+                              cursor={{ fill: "rgba(15,23,42,0.03)" }}
+                              contentStyle={{ borderRadius: 12, borderColor: "#e4e4e7", fontWeight: 700, fontSize: 12 }}
+                            />
+                            <Bar dataKey="value" radius={[10, 10, 10, 10]}>
+                              {volumeDistribution.map((s) => (
+                                <Cell key={s.status} fill={s.color} />
                               ))}
-                            </Pie>
-                          </PieChart>
+                            </Bar>
+                          </BarChart>
                         </ResponsiveContainer>
                       </div>
-
-                      <div className="space-y-2">
-                        {operacionalMock.priorityDistribution.map((p) => (
-                          <div key={p.name} className="flex items-center justify-between text-xs font-bold text-zinc-500">
-                            <span className="inline-flex items-center gap-2">
-                              <span className="h-2.5 w-2.5 rounded-sm" style={{ background: p.color }} />
-                              {p.name}
-                            </span>
-                            <span className="text-zinc-700">{p.value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t border-zinc-100 pt-6">
-                  <div className="flex items-center gap-2">
-                    <FileSpreadsheet className="h-5 w-5 text-violet-600" />
-                    <div className="text-sm font-extrabold text-zinc-900">Gestão de Pedidos de Cartão</div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="rounded-2xl border border-violet-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(139,92,246,0.06)]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs font-bold text-zinc-500">Pedidos Totais</div>
-                          <div className="mt-2 text-2xl font-extrabold text-zinc-900">{operacionalMock.cardRequests.total}</div>
-                        </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
-                          <FileSpreadsheet className="h-5 w-5" />
-                        </div>
-                      </div>
                     </div>
 
-                    <div className="rounded-2xl border border-emerald-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(16,185,129,0.06)]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs font-bold text-zinc-500">Aprovação (%)</div>
-                          <div className="mt-2 text-2xl font-extrabold text-zinc-900">{operacionalMock.cardRequests.approvalPct}%</div>
+                    <div className="rounded-2xl border border-zinc-100/60 bg-white p-6 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+                      <div className="text-sm font-extrabold text-zinc-900">Distribuição de Volume</div>
+                      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_220px] lg:items-center">
+                        <div className="h-[220px] w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={volumeDistribution}
+                                dataKey="value"
+                                nameKey="status"
+                                innerRadius={62}
+                                outerRadius={92}
+                                paddingAngle={3}
+                                stroke="transparent"
+                              >
+                                {volumeDistribution.map((p) => (
+                                  <Cell key={p.status} fill={p.color} />
+                                ))}
+                              </Pie>
+                            </PieChart>
+                          </ResponsiveContainer>
                         </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-                          <ShieldCheck className="h-5 w-5" />
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="rounded-2xl border border-amber-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(245,158,11,0.08)]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs font-bold text-zinc-500">Pendentes</div>
-                          <div className="mt-2 text-2xl font-extrabold text-zinc-900">{operacionalMock.cardRequests.pending}</div>
-                        </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
-                          <Clock className="h-5 w-5" />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-blue-100/60 bg-white p-5 shadow-[0_6px_22px_rgba(59,130,246,0.06)]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs font-bold text-zinc-500">Tempo Médio</div>
-                          <div className="mt-2 text-2xl font-extrabold text-zinc-900">{operacionalMock.cardRequests.avgHours}h</div>
-                        </div>
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-                          <TrendingUp className="h-5 w-5" />
+                        <div className="space-y-2">
+                          {volumeDistribution.map((p) => (
+                            <div key={p.status} className="flex items-center justify-between text-xs font-bold text-zinc-500">
+                              <span className="inline-flex items-center gap-2">
+                                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: p.color }} />
+                                {p.status}
+                              </span>
+                              <span className="text-zinc-700">{p.value}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                ) : null}
               </div>
             ) : tab === "PERFORMANCE" ? (
               <div className="space-y-7">
@@ -696,31 +539,32 @@ export default function GestorRelatoriosKpisClient() {
                     <div className="text-sm font-extrabold text-zinc-900">KPIs de Performance da Frota</div>
                   </div>
 
-                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {computedKpis.map((k, idx) => {
-                      const Icon = k.icon;
-                      const theme = kpiCardTheme(k.iconColor);
-                      return (
-                        <div
-                          key={idx}
-                          className={`rounded-2xl border bg-white p-5 ${theme}`}
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="min-w-0">
-                              <div className="text-xs font-bold text-zinc-500">{k.title}</div>
-                              <div className="mt-2 text-2xl font-extrabold text-zinc-900">{k.value}</div>
-                              {k.subtitle ? (
-                                <div className="mt-1 text-xs font-semibold text-zinc-400">{k.subtitle}</div>
-                              ) : null}
-                            </div>
-                            <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${k.iconBg} ${k.iconColor}`}>
-                              <Icon className="h-5 w-5" />
+                  {computedKpis.length > 0 ? (
+                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      {computedKpis.map((k, idx) => {
+                        const Icon = k.icon;
+                        const theme = kpiCardTheme(k.iconColor);
+                        return (
+                          <div key={idx} className={`rounded-2xl border bg-white p-5 ${theme}`}>
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-zinc-500">{k.title}</div>
+                                <div className="mt-2 text-2xl font-extrabold text-zinc-900">{k.value}</div>
+                                {k.subtitle ? (
+                                  <div className="mt-1 text-xs font-semibold text-zinc-400">{k.subtitle}</div>
+                                ) : null}
+                              </div>
+                              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${k.iconBg} ${k.iconColor}`}>
+                                <Icon className="h-5 w-5" />
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="mt-4 text-sm font-semibold text-zinc-400">Sem dados de performance.</div>
+                  )}
                 </div>
 
                 {/* Top vehicles */}
@@ -773,67 +617,62 @@ export default function GestorRelatoriosKpisClient() {
                 </div>
 
                 {/* Security */}
-                <div className="border-t border-zinc-100 pt-6">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-5 w-5 text-amber-500" />
-                    <div className="text-sm font-extrabold text-zinc-900">Segurança &amp; Atividade de Gestão</div>
-                  </div>
+                {securityData ? (
+                  <div className="border-t border-zinc-100 pt-6">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5 text-amber-500" />
+                      <div className="text-sm font-extrabold text-zinc-900">Segurança &amp; Atividade de Gestão</div>
+                    </div>
 
-                  <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-                    <div className="rounded-2xl border border-blue-100/60 bg-white p-6 shadow-[0_6px_22px_rgba(59,130,246,0.06)]">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">
-                            Aprovações de Gestor
+                    <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                      <div className="rounded-2xl border border-blue-100/60 bg-white p-6 shadow-[0_6px_22px_rgba(59,130,246,0.06)]">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">
+                              Aprovações de Gestor
+                            </div>
+                            <div className="mt-2 text-3xl font-extrabold text-zinc-900">{securityData.approvals}</div>
+                            <div className="mt-1 text-xs font-semibold text-zinc-400">{securityData.approvalsSubtitle}</div>
                           </div>
-                          <div className="mt-2 text-3xl font-extrabold text-zinc-900">{securityMock.approvals}</div>
-                          <div className="mt-1 text-xs font-semibold text-zinc-400">{securityMock.approvalsSubtitle}</div>
-                        </div>
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-700">
-                          <Download className="h-5 w-5" />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-red-100/60 bg-white p-6 shadow-[0_6px_22px_rgba(239,68,68,0.06)]">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">
-                            Alertas Incomuns
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-700">
+                            <Download className="h-5 w-5" />
                           </div>
-                          <div className="mt-2 text-3xl font-extrabold text-red-600">{securityMock.alerts}</div>
-                          <div className="mt-1 text-xs font-semibold text-zinc-400">{securityMock.alertsSubtitle}</div>
-                        </div>
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
-                          <ShieldCheck className="h-5 w-5" />
                         </div>
                       </div>
-                    </div>
 
-                    <div className="rounded-2xl border border-white/8 bg-linear-to-b from-[#0B1220] to-[#0E2236] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.18),0_0_0_1px_rgba(255,255,255,0.06)]">
-                      <div className="text-[11px] font-extrabold uppercase tracking-widest text-white/55">
-                        Estado da Auditoria
+                      <div className="rounded-2xl border border-red-100/60 bg-white p-6 shadow-[0_6px_22px_rgba(239,68,68,0.06)]">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">
+                              Alertas Incomuns
+                            </div>
+                            <div className="mt-2 text-3xl font-extrabold text-red-600">{securityData.alerts}</div>
+                            <div className="mt-1 text-xs font-semibold text-zinc-400">{securityData.alertsSubtitle}</div>
+                          </div>
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+                            <ShieldCheck className="h-5 w-5" />
+                          </div>
+                        </div>
                       </div>
-                      <div className="mt-3 flex items-center gap-2 text-sm font-extrabold text-white">
-                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                        {securityMock.auditStatusTitle}
+
+                      <div className="rounded-2xl border border-white/8 bg-linear-to-b from-[#0B1220] to-[#0E2236] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.18),0_0_0_1px_rgba(255,255,255,0.06)]">
+                        <div className="text-[11px] font-extrabold uppercase tracking-widest text-white/55">
+                          Estado da Auditoria
+                        </div>
+                        <div className="mt-3 flex items-center gap-2 text-sm font-extrabold text-white">
+                          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                          {securityData.auditStatusTitle}
+                        </div>
+                        <div className="mt-2 text-xs font-semibold text-white/45">{securityData.auditStatusSubtitle}</div>
                       </div>
-                      <div className="mt-2 text-xs font-semibold text-white/45">{securityMock.auditStatusSubtitle}</div>
                     </div>
                   </div>
-                </div>
+                ) : null}
               </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-6 py-12 text-center">
-                <div className="text-sm font-semibold text-zinc-500">
-                  Conteúdo desta aba (mock) em breve.
-                </div>
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
     </div>
   );
 }
-

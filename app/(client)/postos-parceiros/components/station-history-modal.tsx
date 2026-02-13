@@ -5,7 +5,7 @@ import { Droplet, FileText, MapPin } from "lucide-react";
 
 import type { PartnerStation } from "@/app/(client)/postos-parceiros/lib/mock-stations";
 import type { ManualFuelRecord, ManualFuelStatus } from "@/app/(client)/postos-parceiros/lib/mock-history";
-import { historyByStationId } from "@/app/(client)/postos-parceiros/lib/mock-history";
+import { useStationAudit } from "@/app/lib/api/stations-hooks";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -35,6 +35,20 @@ function tabButton(active: boolean) {
     : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50";
 }
 
+function parseNumberLike(v: string | number | undefined | null): number {
+  if (typeof v === "number") return v;
+  if (!v) return 0;
+  const cleaned = String(v).replace(/[^\d.,\-]/g, "").replace(",", ".");
+  return Number(cleaned) || 0;
+}
+
+function normalizeAuditStatus(apiStatus: string): ManualFuelStatus {
+  const s = apiStatus.toLowerCase();
+  if (s.includes("resolved") || s.includes("closed") || s.includes("aprovado")) return "APROVADO";
+  if (s.includes("pending") || s.includes("open") || s.includes("aberto")) return "ABERTO";
+  return "EM REGULARIZAÇÃO";
+}
+
 export default function StationHistoryModal({
   open,
   onOpenChange,
@@ -46,10 +60,21 @@ export default function StationHistoryModal({
 }) {
   const [tab, setTab] = useState<TabKey>("TODOS");
 
+  const auditQuery = useStationAudit(station?.id ?? null, "all");
+
   const records: ManualFuelRecord[] = useMemo(() => {
-    if (!station) return [];
-    return historyByStationId[station.id] ?? [];
-  }, [station]);
+    if (!auditQuery.data?.tickets?.length) return [];
+    return auditQuery.data.tickets.map((t) => ({
+      id: t.id,
+      date: t.created_at ? new Date(t.created_at).toLocaleDateString("pt-PT") : "",
+      time: t.created_at ? new Date(t.created_at).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }) : "",
+      requester: t.requested_by_name || t.requested_by_email || "—",
+      vehicle: t.subject?.match(/[A-Z]{2}-\d{2,4}-[A-Z]{0,2}/)?.[0] ?? "—",
+      amountKz: parseNumberLike(t.description?.match(/(\d[\d.,]*)\s*KZ/i)?.[1]),
+      liters: parseNumberLike(t.description?.match(/(\d[\d.,]*)\s*L/i)?.[1]),
+      status: normalizeAuditStatus(t.status),
+    }));
+  }, [auditQuery.data]);
 
   const filtered = useMemo(() => {
     if (tab === "TODOS") return records;
@@ -94,117 +119,127 @@ export default function StationHistoryModal({
         </div>
 
         <div className="px-6 py-6">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-5">
-              <div className="text-[11px] font-extrabold uppercase tracking-widest text-blue-700">
-                Registos
-              </div>
-              <div className="mt-2 text-3xl font-extrabold text-blue-800">
-                {totals.count}
-              </div>
+          {auditQuery.isLoading ? (
+            <div className="py-6 text-sm font-semibold text-zinc-500">
+              <span className="inline-flex items-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+                A carregar histórico...
+              </span>
             </div>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-5">
+                  <div className="text-[11px] font-extrabold uppercase tracking-widest text-blue-700">
+                    Registos
+                  </div>
+                  <div className="mt-2 text-3xl font-extrabold text-blue-800">
+                    {totals.count}
+                  </div>
+                </div>
 
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
-              <div className="text-[11px] font-extrabold uppercase tracking-widest text-emerald-700">
-                KZ Total Faturado
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
+                  <div className="text-[11px] font-extrabold uppercase tracking-widest text-emerald-700">
+                    KZ Total Faturado
+                  </div>
+                  <div className="mt-2 text-3xl font-extrabold text-emerald-800">
+                    KZ {formatKz(totals.totalKz)}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-amber-100 bg-amber-50/40 p-5">
+                  <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-amber-700">
+                    <Droplet className="h-4 w-4" />
+                    Volume Total
+                  </div>
+                  <div className="mt-2 text-3xl font-extrabold text-amber-800">
+                    {totals.totalLiters.toFixed(1)} L
+                  </div>
+                </div>
               </div>
-              <div className="mt-2 text-3xl font-extrabold text-emerald-800">
-                KZ {formatKz(totals.totalKz)}
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => setTab("TODOS")}
+                  className={`rounded-xl border px-4 py-2 text-sm font-bold ${tabButton(tab === "TODOS")}`}
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("PENDENTES")}
+                  className={`rounded-xl border px-4 py-2 text-sm font-bold ${tabButton(tab === "PENDENTES")}`}
+                >
+                  Pendentes / Pedidos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("REGULARIZACAO")}
+                  className={`rounded-xl border px-4 py-2 text-sm font-bold ${tabButton(tab === "REGULARIZACAO")}`}
+                >
+                  Em Regularização
+                </button>
               </div>
-            </div>
 
-            <div className="rounded-2xl border border-amber-100 bg-amber-50/40 p-5">
-              <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-widest text-amber-700">
-                <Droplet className="h-4 w-4" />
-                Volume Total
+              <div className="mt-5 overflow-hidden rounded-2xl border border-zinc-100/60">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-zinc-50/60">
+                      <TableHead>DATA</TableHead>
+                      <TableHead>SOLICITANTE</TableHead>
+                      <TableHead>VIATURA</TableHead>
+                      <TableHead>VALOR / LITROS</TableHead>
+                      <TableHead>ESTADO</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="py-5">
+                          <div className="text-sm font-bold text-zinc-700">{r.date}</div>
+                          <div className="text-xs font-semibold text-zinc-400">{r.time}</div>
+                        </TableCell>
+                        <TableCell className="py-5">
+                          <div className="text-sm font-extrabold text-zinc-900">{r.requester}</div>
+                        </TableCell>
+                        <TableCell className="py-5">
+                          <div className="text-sm font-bold text-zinc-700">{r.vehicle}</div>
+                        </TableCell>
+                        <TableCell className="py-5">
+                          <div className="text-sm font-extrabold text-zinc-900">
+                            KZ {formatKz(r.amountKz)}
+                          </div>
+                          <div className="text-xs font-semibold text-zinc-400">
+                            {r.liters} L
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-5">
+                          <span
+                            className={`inline-flex rounded-md border px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest ${statusBadge(r.status)}`}
+                          >
+                            {r.status}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+
+                    {filtered.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-16 text-center">
+                          <div className="text-sm font-semibold text-zinc-400">
+                            Nenhum registo encontrado.
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
               </div>
-              <div className="mt-2 text-3xl font-extrabold text-amber-800">
-                {totals.totalLiters.toFixed(1)} L
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => setTab("TODOS")}
-              className={`rounded-xl border px-4 py-2 text-sm font-bold ${tabButton(tab === "TODOS")}`}
-            >
-              Todos
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("PENDENTES")}
-              className={`rounded-xl border px-4 py-2 text-sm font-bold ${tabButton(tab === "PENDENTES")}`}
-            >
-              Pendentes / Pedidos
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("REGULARIZACAO")}
-              className={`rounded-xl border px-4 py-2 text-sm font-bold ${tabButton(tab === "REGULARIZACAO")}`}
-            >
-              Em Regularização
-            </button>
-          </div>
-
-          <div className="mt-5 overflow-hidden rounded-2xl border border-zinc-100/60">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-zinc-50/60">
-                  <TableHead>DATA</TableHead>
-                  <TableHead>SOLICITANTE</TableHead>
-                  <TableHead>VIATURA</TableHead>
-                  <TableHead>VALOR / LITROS</TableHead>
-                  <TableHead>ESTADO</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="py-5">
-                      <div className="text-sm font-bold text-zinc-700">{r.date}</div>
-                      <div className="text-xs font-semibold text-zinc-400">{r.time}</div>
-                    </TableCell>
-                    <TableCell className="py-5">
-                      <div className="text-sm font-extrabold text-zinc-900">{r.requester}</div>
-                    </TableCell>
-                    <TableCell className="py-5">
-                      <div className="text-sm font-bold text-zinc-700">{r.vehicle}</div>
-                    </TableCell>
-                    <TableCell className="py-5">
-                      <div className="text-sm font-extrabold text-zinc-900">
-                        KZ {formatKz(r.amountKz)}
-                      </div>
-                      <div className="text-xs font-semibold text-zinc-400">
-                        {r.liters} L
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-5">
-                      <span
-                        className={`inline-flex rounded-md border px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest ${statusBadge(r.status)}`}
-                      >
-                        {r.status}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-
-                {filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-16 text-center">
-                      <div className="text-sm font-semibold text-zinc-400">
-                        Nenhum registo encontrado.
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </div>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>
   );
 }
-

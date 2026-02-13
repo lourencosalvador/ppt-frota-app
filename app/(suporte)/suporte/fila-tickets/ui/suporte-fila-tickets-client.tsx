@@ -1,11 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check, Eye, Search, Zap } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Eye, FileText, Search, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import type { Ticket } from "@/app/(client)/meus-pedidos/lib/mock-tickets";
-import { mockTickets } from "@/app/(client)/meus-pedidos/lib/mock-tickets";
+import { ApiError } from "@/app/lib/api/api-client";
+import { useTickets, useUpdateTicket } from "@/app/lib/api/tickets-hooks";
+import { apiTicketToUi, uiStatusToApi } from "@/app/(client)/meus-pedidos/lib/ticket-api-mapper";
+import type { TicketStatus as UiTicketStatus } from "@/app/(client)/meus-pedidos/lib/mock-tickets";
+import EmptyState from "@/components/ui/empty-state";
 import TicketPriorityBadge from "@/app/(client)/meus-pedidos/components/ticket-priority-badge";
 import TicketStatusBadge from "@/app/(client)/meus-pedidos/components/ticket-status-badge";
 import TicketDetailsModal from "@/app/(client)/meus-pedidos/components/ticket-details-modal";
@@ -20,33 +24,53 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-type SupportStatusFilter = "TODOS" | Ticket["status"];
+type SupportStatusFilter = "TODOS" | UiTicketStatus;
 
 export default function SuporteFilaTicketsClient() {
-  const [tickets, setTickets] = useState<Ticket[]>(mockTickets);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<SupportStatusFilter>("TODOS");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selected, setSelected] = useState<Ticket | null>(null);
 
+  const apiStatus = status === "TODOS" ? undefined : uiStatusToApi(status as UiTicketStatus);
+  const ticketsQuery = useTickets({
+    status: apiStatus,
+    search: q.trim() || undefined,
+    page: 1,
+    page_size: 100,
+  });
+  const updateMutation = useUpdateTicket();
+  const lastErrorRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!ticketsQuery.isError) return;
+    const err = ticketsQuery.error;
+    const message = err instanceof ApiError ? err.message : "Falha ao carregar tickets.";
+    if (lastErrorRef.current === message) return;
+    lastErrorRef.current = message;
+    toast.error(message);
+  }, [ticketsQuery.error, ticketsQuery.isError]);
+
+  const tickets = useMemo<Ticket[]>(() => {
+    const list = ticketsQuery.data ?? [];
+    return list.map((t) => apiTicketToUi(t, "Suporte"));
+  }, [ticketsQuery.data]);
+
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
+    if (!query) return tickets;
     return tickets.filter((t) => {
-      if (status !== "TODOS" && t.status !== status) return false;
-      if (!query) return true;
       const blob = `${t.code} ${t.subject} ${t.requester} ${t.requesterRole}`.toLowerCase();
       return blob.includes(query);
     });
-  }, [tickets, q, status]);
+  }, [tickets, q]);
 
   function resolveTicket(t: Ticket) {
-    setTickets((prev) => prev.map((p) => (p.id === t.id ? { ...p, status: "CONCLUIDO" as any } : p)));
-    toast.success("Ticket marcado como concluído.");
+    toast.info("Resolução via API: funcionalidade em breve.");
   }
 
   function inProgress(t: Ticket) {
-    setTickets((prev) => prev.map((p) => (p.id === t.id ? { ...p, status: "EM ANALISE" as any } : p)));
-    toast.message("Ticket em atendimento.");
+    toast.info("Alterar estado via API: funcionalidade em breve.");
   }
 
   return (
@@ -94,86 +118,96 @@ export default function SuporteFilaTicketsClient() {
           </div>
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-100/60">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-zinc-50/60">
-                <TableHead>TICKET</TableHead>
-                <TableHead>CLIENTE</TableHead>
-                <TableHead>PRIORIDADE</TableHead>
-                <TableHead>ESTADO</TableHead>
-                <TableHead className="text-right">AÇÕES</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell className="py-5">
-                    <div className="text-xs font-bold text-zinc-400">{t.code}</div>
-                    <div className="mt-0.5 text-sm font-extrabold text-zinc-900">{t.subject}</div>
-                  </TableCell>
-                  <TableCell className="py-5">
-                    <div className="text-sm font-extrabold text-zinc-900">{t.requester}</div>
-                    <div className="text-xs font-semibold text-zinc-400">{t.requesterRole}</div>
-                  </TableCell>
-                  <TableCell className="py-5">
-                    <TicketPriorityBadge priority={t.priority} />
-                  </TableCell>
-                  <TableCell className="py-5">
-                    <TicketStatusBadge status={t.status} />
-                  </TableCell>
-                  <TableCell className="py-5">
-                    <div className="flex items-center justify-end gap-2">
-                      {t.status !== ("CONCLUIDO" as any) ? (
-                        <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-10 rounded-xl"
-                            onClick={() => inProgress(t)}
-                          >
-                            <Zap className="h-4 w-4" />
-                            Em atendimento
-                          </Button>
-                          <Button
-                            type="button"
-                            className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700"
-                            onClick={() => resolveTicket(t)}
-                          >
-                            <Check className="h-4 w-4" />
-                            Concluir
-                          </Button>
-                        </>
-                      ) : null}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-10 w-10 rounded-xl px-0"
-                        onClick={() => {
-                          setSelected(t);
-                          setDetailsOpen(true);
-                        }}
-                        aria-label="Ver"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+        {ticketsQuery.isLoading ? (
+          <div className="mt-6 px-2 py-6 text-sm font-semibold text-zinc-500">
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+              A carregar tickets...
+            </span>
+          </div>
+        ) : null}
 
-              {filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-14 text-center">
-                    <div className="text-sm font-semibold text-zinc-400">Nenhum ticket encontrado.</div>
-                  </TableCell>
+        {!ticketsQuery.isLoading && filtered.length === 0 ? (
+          <div className="mt-6">
+            <EmptyState
+              icon={FileText}
+              title="Nenhum ticket encontrado"
+              description="Os tickets dos clientes aparecerão aqui quando forem criados."
+            />
+          </div>
+        ) : (
+          <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-100/60">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-zinc-50/60">
+                  <TableHead>TICKET</TableHead>
+                  <TableHead>CLIENTE</TableHead>
+                  <TableHead>PRIORIDADE</TableHead>
+                  <TableHead>ESTADO</TableHead>
+                  <TableHead className="text-right">AÇÕES</TableHead>
                 </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((t) => (
+                  <TableRow key={t.id}>
+                    <TableCell className="py-5">
+                      <div className="text-xs font-bold text-zinc-400">{t.code}</div>
+                      <div className="mt-0.5 text-sm font-extrabold text-zinc-900">{t.subject}</div>
+                    </TableCell>
+                    <TableCell className="py-5">
+                      <div className="text-sm font-extrabold text-zinc-900">{t.requester}</div>
+                      <div className="text-xs font-semibold text-zinc-400">{t.requesterRole}</div>
+                    </TableCell>
+                    <TableCell className="py-5">
+                      <TicketPriorityBadge priority={t.priority} />
+                    </TableCell>
+                    <TableCell className="py-5">
+                      <TicketStatusBadge status={t.status} />
+                    </TableCell>
+                    <TableCell className="py-5">
+                      <div className="flex items-center justify-end gap-2">
+                        {t.status !== "CONCLUIDO" ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-10 rounded-xl"
+                              onClick={() => inProgress(t)}
+                            >
+                              <Zap className="h-4 w-4" />
+                              Em atendimento
+                            </Button>
+                            <Button
+                              type="button"
+                              className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                              onClick={() => resolveTicket(t)}
+                            >
+                              <Check className="h-4 w-4" />
+                              Concluir
+                            </Button>
+                          </>
+                        ) : null}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-10 w-10 rounded-xl px-0"
+                          onClick={() => {
+                            setSelected(t);
+                            setDetailsOpen(true);
+                          }}
+                          aria-label="Ver"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-

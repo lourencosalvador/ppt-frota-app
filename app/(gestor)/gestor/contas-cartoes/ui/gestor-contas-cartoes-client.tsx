@@ -1,13 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Building2, CalendarDays, Car, FileDown, FileSpreadsheet, Plus, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Building2, CalendarDays, Car, CreditCard, FileDown, FileSpreadsheet, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 
-import type { Account, Transaction, TxType } from "@/app/(gestor)/gestor/contas-cartoes/lib/mock-contas-cartoes";
-import { mockAccounts, mockTransactions } from "@/app/(gestor)/gestor/contas-cartoes/lib/mock-contas-cartoes";
+import { ApiError } from "@/app/lib/api/api-client";
+import { useCards } from "@/app/lib/api/cards-hooks";
+import type { ApiCard } from "@/app/lib/api/cards";
+import EmptyState from "@/components/ui/empty-state";
 import CreateAccountModal from "@/app/(gestor)/gestor/contas-cartoes/components/create-account-modal";
 import AccountTopupModal from "@/app/(gestor)/gestor/contas-cartoes/components/account-topup-modal";
+import type { Account, Transaction, TxType } from "@/app/(gestor)/gestor/contas-cartoes/lib/mock-contas-cartoes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +29,47 @@ function formatKz(v: number) {
   return new Intl.NumberFormat("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 }
 
+function parseKz(v: string | undefined | null): number {
+  if (!v) return 0;
+  const cleaned = v.replace(/[^\d.,\-]/g, "").replace(",", ".");
+  return Number(cleaned) || 0;
+}
+
+function mapCardToAccount(card: ApiCard): Account {
+  return {
+    id: card.id,
+    name: card.company_name || "Cartão Frota+",
+    accountNumber: `**** **** **** ${card.uid?.slice(-4) ?? "0000"}`,
+    activeCards: 1,
+    status: card.status === "active" ? "ACTIVE" : "INACTIVE",
+    balanceKz: parseKz(card.current_balance),
+  };
+}
+
+function groupCardsByCompany(cards: ApiCard[]): Account[] {
+  const grouped = new Map<string, { cards: ApiCard[]; totalBalance: number }>();
+  for (const card of cards) {
+    const key = card.company ?? card.id;
+    const existing = grouped.get(key);
+    const balance = parseKz(card.current_balance);
+    if (existing) {
+      existing.cards.push(card);
+      existing.totalBalance += balance;
+    } else {
+      grouped.set(key, { cards: [card], totalBalance: balance });
+    }
+  }
+
+  return Array.from(grouped.entries()).map(([key, { cards: groupCards, totalBalance }]) => ({
+    id: key,
+    name: groupCards[0].company_name || "Conta Frota+",
+    accountNumber: `${groupCards.length} cartão(ões) associado(s)`,
+    activeCards: groupCards.filter((c) => c.status === "active").length,
+    status: groupCards.some((c) => c.status === "active") ? "ACTIVE" as const : "INACTIVE" as const,
+    balanceKz: totalBalance,
+  }));
+}
+
 function parseISO(dateISO: string) {
   const m = dateISO.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
@@ -40,7 +84,6 @@ function inRange(dateISO: string, startISO: string, endISO: string) {
   const e = endISO ? parseISO(endISO) : null;
   if (s && d < s) return false;
   if (e) {
-    // inclusive end date
     const end = new Date(Date.UTC(e.getUTCFullYear(), e.getUTCMonth(), e.getUTCDate(), 23, 59, 59));
     if (d > end) return false;
   }
@@ -52,8 +95,8 @@ function amountClass(amountKz: number) {
 }
 
 export default function GestorContasCartoesClient() {
-  const [accounts, setAccounts] = useState<Account[]>(mockAccounts);
-  const [transactions, setTransactions] = useState<Transaction[]>(mockTransactions);
+  const cardsQuery = useCards();
+  const lastErrorRef = useRef<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [topupOpen, setTopupOpen] = useState(false);
@@ -63,6 +106,24 @@ export default function GestorContasCartoesClient() {
   const [endDate, setEndDate] = useState("");
   const [typeFilter, setTypeFilter] = useState<TxFilter>("TODOS");
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (!cardsQuery.isError) return;
+    const err = cardsQuery.error;
+    const message = err instanceof ApiError ? err.message : "Falha ao carregar contas e cartões.";
+    if (lastErrorRef.current === message) return;
+    lastErrorRef.current = message;
+    toast.error(message);
+  }, [cardsQuery.error, cardsQuery.isError]);
+
+  const accounts = useMemo<Account[]>(() => {
+    if (!cardsQuery.data) return [];
+    return groupCardsByCompany(cardsQuery.data);
+  }, [cardsQuery.data]);
+
+  const transactions = useMemo<Transaction[]>(() => {
+    return [];
+  }, []);
 
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.id === selectedAccountId) ?? null,
@@ -77,14 +138,7 @@ export default function GestorContasCartoesClient() {
       }
       if (typeFilter !== "TODOS" && t.type !== typeFilter) return false;
       if (!q) return true;
-      const blob = [
-        t.title,
-        t.location,
-        t.plate ?? "",
-        t.driver ?? "",
-        t.refId,
-        t.type,
-      ]
+      const blob = [t.title, t.location, t.plate ?? "", t.driver ?? "", t.refId, t.type]
         .join(" ")
         .toLowerCase();
       return blob.includes(q);
@@ -153,35 +207,21 @@ export default function GestorContasCartoesClient() {
       <CreateAccountModal
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreate={(acc) => setAccounts((prev) => [acc, ...prev])}
+        onCreate={() => {
+          toast.info("Criação de conta: integração com API em breve.");
+        }}
       />
 
       <AccountTopupModal
         open={topupOpen}
         onOpenChange={setTopupOpen}
         account={selectedAccount}
-        onConfirm={async (amountKz) => {
-          if (!selectedAccountId) return;
-          setAccounts((prev) =>
-            prev.map((a) => (a.id === selectedAccountId ? { ...a, balanceKz: a.balanceKz + amountKz } : a)),
-          );
-          setTransactions((prev) => [
-            {
-              id: crypto?.randomUUID?.() ?? `${Date.now()}`,
-              dateISO: new Date().toISOString().slice(0, 10),
-              type: "RECARGA",
-              title: "Recarga Mensal",
-              refId: `ID: ${crypto?.randomUUID?.()?.slice(0, 6) ?? "topup"}`,
-              location: "Online / Sede",
-              amountKz,
-            },
-            ...prev,
-          ]);
+        onConfirm={async () => {
+          toast.info("Carregamento: integração com API em breve.");
         }}
       />
 
       <div className="mx-auto w-full max-w-[1240px] space-y-6">
-        {/* Header */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-2xl font-extrabold text-zinc-900">Gestão de Contas e Cartões</div>
@@ -200,54 +240,69 @@ export default function GestorContasCartoesClient() {
           </Button>
         </div>
 
-        {/* Accounts list */}
-        <div className="space-y-4">
-          {accounts.map((a) => (
-            <div
-              key={a.id}
-              className="rounded-2xl border border-zinc-100/60 bg-white p-6 shadow-[0_4px_20px_rgb(0,0,0,0.01)]"
-            >
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-50 text-zinc-600">
-                    <Building2 className="h-7 w-7" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-base font-extrabold text-zinc-900">{a.name}</div>
-                    <div className="mt-1 font-mono text-sm font-semibold text-zinc-400">{a.accountNumber}</div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-1 text-xs font-bold text-zinc-600">
-                        {a.activeCards} Cartões Ativos
-                      </span>
-                      <span className="inline-flex items-center rounded-md border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">
-                        {a.status}
-                      </span>
+        {cardsQuery.isLoading ? (
+          <div className="rounded-2xl border border-zinc-100/60 bg-white p-6 text-sm font-semibold text-zinc-500 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+              A carregar contas e cartões...
+            </span>
+          </div>
+        ) : null}
+
+        {!cardsQuery.isLoading && accounts.length === 0 ? (
+          <EmptyState
+            icon={CreditCard}
+            title="Nenhuma conta encontrada"
+            description="As contas e cartões da empresa vão aparecer aqui quando estiverem disponíveis."
+          />
+        ) : (
+          <div className="space-y-4">
+            {accounts.map((a) => (
+              <div
+                key={a.id}
+                className="rounded-2xl border border-zinc-100/60 bg-white p-6 shadow-[0_4px_20px_rgb(0,0,0,0.01)]"
+              >
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-50 text-zinc-600">
+                      <Building2 className="h-7 w-7" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-base font-extrabold text-zinc-900">{a.name}</div>
+                      <div className="mt-1 font-mono text-sm font-semibold text-zinc-400">{a.accountNumber}</div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-1 text-xs font-bold text-zinc-600">
+                          {a.activeCards} Cartões Ativos
+                        </span>
+                        <span className="inline-flex items-center rounded-md border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">
+                          {a.status}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center justify-between gap-4 lg:justify-end">
-                  <div className="text-right">
-                    <div className="text-xs font-bold text-zinc-400">Saldo Disponível</div>
-                    <div className="mt-1 text-2xl font-extrabold text-zinc-900">KZ {formatKz(a.balanceKz)}</div>
+                  <div className="flex items-center justify-between gap-4 lg:justify-end">
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-zinc-400">Saldo Disponível</div>
+                      <div className="mt-1 text-2xl font-extrabold text-zinc-900">KZ {formatKz(a.balanceKz)}</div>
+                    </div>
+                    <Button
+                      type="button"
+                      className="h-11 rounded-xl bg-blue-600 px-5 font-extrabold hover:bg-blue-700"
+                      onClick={() => {
+                        setSelectedAccountId(a.id);
+                        setTopupOpen(true);
+                      }}
+                    >
+                      Carregar
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    className="h-11 rounded-xl bg-blue-600 px-5 font-extrabold hover:bg-blue-700"
-                    onClick={() => {
-                      setSelectedAccountId(a.id);
-                      setTopupOpen(true);
-                    }}
-                  >
-                    Carregar
-                  </Button>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
-        {/* Reports & extracts */}
         <div className="rounded-2xl border border-zinc-100/60 bg-white shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
           <div className="border-b border-zinc-100 px-6 py-5">
             <div className="text-base font-extrabold text-zinc-900">Relatórios e Extratos</div>
@@ -317,7 +372,7 @@ export default function GestorContasCartoesClient() {
               <Button
                 type="button"
                 variant="outline"
-                className="h-11 rounded-xl border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                className="h-11 rounded-xl border-emerald-50 text-emerald-800 hover:bg-emerald-100"
                 onClick={exportExcel}
               >
                 <FileSpreadsheet className="h-4 w-4" />
@@ -387,7 +442,9 @@ export default function GestorContasCartoesClient() {
                 {filteredTx.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="py-14 text-center">
-                      <div className="text-sm font-semibold text-zinc-400">Nenhum registo encontrado.</div>
+                      <div className="text-sm font-semibold text-zinc-400">
+                        Nenhum registo de transação disponível. O histórico será populado à medida que a API de transações for integrada.
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -396,11 +453,10 @@ export default function GestorContasCartoesClient() {
           </div>
 
           <div className="flex flex-col gap-2 border-t border-zinc-100 px-6 py-4 text-xs font-semibold text-zinc-400 lg:flex-row lg:items-center lg:justify-between">
-            <div>Mostrando {Math.min(filteredTx.length, filteredTx.length)} de {filteredTx.length} registos</div>
+            <div>Mostrando {filteredTx.length} de {filteredTx.length} registos</div>
           </div>
         </div>
       </div>
     </div>
   );
 }
-

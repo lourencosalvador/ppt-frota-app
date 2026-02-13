@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { CalendarDays, FileText, User } from "lucide-react";
+import { TicketChat } from "@/components/tickets/ticket-chat";
 
 import type { Ticket, TicketStatus } from "@/app/(client)/meus-pedidos/lib/mock-tickets";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -163,6 +164,10 @@ export default function SupportTicketDetailsSheet({
                       </div>
                     ))}
                   </div>
+                </div>
+                
+                <div className="h-[600px]">
+                   <TicketChat ticketId={ticket.id} currentUserRole="support" />
                 </div>
               </div>
             )}

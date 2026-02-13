@@ -1,6 +1,6 @@
 "use client";
 
-import type { HistoryItem } from "@/app/(client)/home/lib/mock-data";
+import type { HistoryItem } from "@/app/(client)/home/lib/types";
 
 export default function HistoryPanel({
   items,
