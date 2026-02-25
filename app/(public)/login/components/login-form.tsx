@@ -18,6 +18,11 @@ const loginSchema = z.object({
 
 type LoginValues = z.infer<typeof loginSchema>;
 
+const fieldBase =
+  "h-12 w-full rounded-2xl border bg-white/10 px-4 text-base text-white outline-none transition placeholder:text-white/40 focus:ring-4";
+const fieldOk = "border-white/15 focus:border-emerald-400 focus:ring-emerald-400/20";
+const fieldErr = "border-red-400/60 focus:border-red-400 focus:ring-red-400/20";
+
 export default function LoginForm() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
@@ -61,9 +66,9 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="mt-10 w-full max-w-2xl space-y-5">
+    <form onSubmit={handleSubmit(onSubmit)} className="mt-8 w-full space-y-5">
       <div className="space-y-2">
-        <label htmlFor="email" className="text-sm font-semibold text-zinc-700">
+        <label htmlFor="email" className="text-sm font-semibold text-white/70">
           Email
         </label>
         <input
@@ -71,22 +76,17 @@ export default function LoginForm() {
           type="email"
           autoComplete="email"
           {...register("email")}
-          placeholder="ex: nome@empresa.com"
+          placeholder="Email de acesso"
           aria-invalid={Boolean(errors.email)}
-          className={[
-            "h-12 w-full rounded-2xl border bg-white px-4 text-base outline-none transition placeholder:text-zinc-400 focus:ring-4",
-            errors.email
-              ? "border-red-300 focus:border-red-400 focus:ring-red-500/15"
-              : "border-zinc-200 focus:border-emerald-500 focus:ring-emerald-500/15",
-          ].join(" ")}
+          className={`${fieldBase} ${errors.email ? fieldErr : fieldOk}`}
         />
         {errors.email?.message ? (
-          <div className="text-xs font-semibold text-red-600">{errors.email.message}</div>
+          <div className="text-xs font-semibold text-red-300">{errors.email.message}</div>
         ) : null}
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="password" className="text-sm font-semibold text-zinc-700">
+        <label htmlFor="password" className="text-sm font-semibold text-white/70">
           Palavra-passe
         </label>
         <div className="relative">
@@ -95,32 +95,27 @@ export default function LoginForm() {
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
             {...register("password")}
-            placeholder="••••••••"
+            placeholder="Senha de Acesso"
             aria-invalid={Boolean(errors.password)}
-            className={[
-              "h-12 w-full rounded-2xl border bg-white px-4 pr-24 text-base outline-none transition placeholder:text-zinc-400 focus:ring-4",
-              errors.password
-                ? "border-red-300 focus:border-red-400 focus:ring-red-500/15"
-                : "border-zinc-200 focus:border-emerald-500 focus:ring-emerald-500/15",
-            ].join(" ")}
+            className={`${fieldBase} pr-24 ${errors.password ? fieldErr : fieldOk}`}
           />
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl px-3 py-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-50"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl px-3 py-2 text-sm font-semibold text-white/50 hover:text-white/80"
           >
             {showPassword ? "Ocultar" : "Mostrar"}
           </button>
         </div>
         {errors.password?.message ? (
-          <div className="text-xs font-semibold text-red-600">{errors.password.message}</div>
+          <div className="text-xs font-semibold text-red-300">{errors.password.message}</div>
         ) : null}
       </div>
 
-      <div className="flex items-center justify-between pt-2">
+      <div className="flex items-center justify-between pt-3">
         <Link
           href="/recuperar-senha"
-          className="text-sm font-semibold text-blue-600 hover:underline"
+          className="text-sm font-semibold text-white/50 transition hover:text-white/80"
         >
           Esqueci a senha
         </Link>
@@ -128,7 +123,7 @@ export default function LoginForm() {
         <button
           type="submit"
           disabled={!isValid || isLoading}
-          className="inline-flex h-11 items-center justify-center rounded-2xl bg-emerald-600 px-9 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-11 items-center justify-center rounded-2xl bg-emerald-600 px-9 text-sm font-semibold text-white shadow-lg shadow-emerald-900/30 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isLoading ? (
             <span className="inline-flex items-center gap-2">
@@ -141,11 +136,11 @@ export default function LoginForm() {
         </button>
       </div>
 
-      <div className="pt-3 text-sm text-zinc-600">
+      <div className="pt-3 text-sm text-white/40">
         Ainda não tens conta?{" "}
         <Link
           href="/criar-conta"
-          className="font-semibold text-emerald-700 hover:underline"
+          className="font-semibold text-emerald-400 transition hover:text-emerald-300"
         >
           Criar conta
         </Link>
@@ -153,4 +148,3 @@ export default function LoginForm() {
     </form>
   );
 }
-

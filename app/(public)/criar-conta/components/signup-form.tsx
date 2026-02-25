@@ -41,6 +41,11 @@ const signupSchema = z.object({
 
 type SignupValues = z.infer<typeof signupSchema>;
 
+const fieldBase =
+  "h-12 w-full rounded-2xl border bg-white/10 px-4 text-base text-white outline-none transition placeholder:text-white/40 focus:ring-4";
+const fieldOk = "border-white/15 focus:border-emerald-400 focus:ring-emerald-400/20";
+const fieldErr = "border-red-400/60 focus:border-red-400 focus:ring-red-400/20";
+
 export default function SignupForm() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
@@ -78,7 +83,7 @@ export default function SignupForm() {
   const progressClasses = useMemo(() => {
     if (progress < 0.34) return "bg-red-500";
     if (progress < 1) return "bg-amber-500";
-    return "bg-emerald-600";
+    return "bg-emerald-500";
   }, [progress]);
 
   async function onSubmit(values: SignupValues) {
@@ -110,9 +115,9 @@ export default function SignupForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="mt-10 w-full max-w-2xl space-y-5">
+    <form onSubmit={handleSubmit(onSubmit)} className="mt-8 w-full space-y-5">
       <div className="space-y-2">
-        <label htmlFor="nome" className="text-sm font-semibold text-zinc-700">
+        <label htmlFor="nome" className="text-sm font-semibold text-white/70">
           Nome
         </label>
         <input
@@ -121,20 +126,15 @@ export default function SignupForm() {
           {...register("nome")}
           placeholder="Ex: Lorrys Manuel"
           aria-invalid={Boolean(errors.nome)}
-          className={[
-            "h-12 w-full rounded-2xl border bg-white px-4 text-base outline-none transition placeholder:text-zinc-400 focus:ring-4",
-            errors.nome
-              ? "border-red-300 focus:border-red-400 focus:ring-red-500/15"
-              : "border-zinc-200 focus:border-emerald-500 focus:ring-emerald-500/15",
-          ].join(" ")}
+          className={`${fieldBase} ${errors.nome ? fieldErr : fieldOk}`}
         />
         {errors.nome?.message ? (
-          <div className="text-xs font-semibold text-red-600">{errors.nome.message}</div>
+          <div className="text-xs font-semibold text-red-300">{errors.nome.message}</div>
         ) : null}
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="email" className="text-sm font-semibold text-zinc-700">
+        <label htmlFor="email" className="text-sm font-semibold text-white/70">
           Email
         </label>
         <input
@@ -144,26 +144,21 @@ export default function SignupForm() {
           {...register("email")}
           placeholder="ex: nome@empresa.com"
           aria-invalid={Boolean(errors.email)}
-          className={[
-            "h-12 w-full rounded-2xl border bg-white px-4 text-base outline-none transition placeholder:text-zinc-400 focus:ring-4",
-            errors.email
-              ? "border-red-300 focus:border-red-400 focus:ring-red-500/15"
-              : "border-zinc-200 focus:border-emerald-500 focus:ring-emerald-500/15",
-          ].join(" ")}
+          className={`${fieldBase} ${errors.email ? fieldErr : fieldOk}`}
         />
         {errors.email?.message ? (
-          <div className="text-xs font-semibold text-red-600">{errors.email.message}</div>
+          <div className="text-xs font-semibold text-red-300">{errors.email.message}</div>
         ) : null}
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-semibold text-zinc-700">Tipo de conta</label>
+        <label className="text-sm font-semibold text-white/70">Tipo de conta</label>
         <Controller
           control={control}
           name="type"
           render={({ field }) => (
             <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger className="h-12 rounded-2xl">
+              <SelectTrigger className="h-12 rounded-2xl border-white/15 bg-white/10 text-white hover:bg-white/15 [&>svg]:text-white/50">
                 <SelectValue placeholder="Seleciona o tipo" />
               </SelectTrigger>
               <SelectContent>
@@ -175,16 +170,16 @@ export default function SignupForm() {
           )}
         />
         {errors.type?.message ? (
-          <div className="text-xs font-semibold text-red-600">{errors.type.message}</div>
+          <div className="text-xs font-semibold text-red-300">{errors.type.message}</div>
         ) : (
-          <div className="text-xs font-semibold text-zinc-400">
+          <div className="text-xs font-semibold text-white/30">
             Define o perfil para acesso aos módulos.
           </div>
         )}
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="password" className="text-sm font-semibold text-zinc-700">
+        <label htmlFor="password" className="text-sm font-semibold text-white/70">
           Palavra-passe
         </label>
         <div className="relative">
@@ -195,32 +190,27 @@ export default function SignupForm() {
             {...register("password")}
             placeholder="mínimo 6 caracteres"
             aria-invalid={Boolean(errors.password)}
-            className={[
-              "h-12 w-full rounded-2xl border bg-white px-4 pr-24 text-base outline-none transition placeholder:text-zinc-400 focus:ring-4",
-              errors.password
-                ? "border-red-300 focus:border-red-400 focus:ring-red-500/15"
-                : "border-zinc-200 focus:border-emerald-500 focus:ring-emerald-500/15",
-            ].join(" ")}
+            className={`${fieldBase} pr-24 ${errors.password ? fieldErr : fieldOk}`}
           />
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl px-3 py-2 text-sm font-semibold text-zinc-600 hover:bg-zinc-50"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-xl px-3 py-2 text-sm font-semibold text-white/50 hover:text-white/80"
           >
             {showPassword ? "Ocultar" : "Mostrar"}
           </button>
         </div>
 
-        <div className="rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4">
+        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500">
+            <div className="text-[11px] font-extrabold uppercase tracking-widest text-white/40">
               Força da senha
             </div>
-            <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-500">
+            <div className="text-[11px] font-extrabold uppercase tracking-widest text-white/40">
               {Math.round(progress * 100)}%
             </div>
           </div>
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-zinc-200">
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
             <motion.div
               className={`h-2 ${progressClasses}`}
               initial={false}
@@ -231,16 +221,16 @@ export default function SignupForm() {
           <div className="mt-4 space-y-2">
             {rules.map((r) => (
               <div key={r.id} className="flex items-center justify-between">
-                <div className="text-sm font-semibold text-zinc-700">{r.label}</div>
+                <div className="text-sm font-semibold text-white/60">{r.label}</div>
                 <motion.div
                   initial={false}
-                  animate={{ scale: r.ok ? 1 : 0.95, opacity: r.ok ? 1 : 0.6 }}
+                  animate={{ scale: r.ok ? 1 : 0.95, opacity: r.ok ? 1 : 0.5 }}
                   transition={{ type: "spring", stiffness: 260, damping: 22 }}
                   className={[
                     "inline-flex h-7 w-7 items-center justify-center rounded-full border",
                     r.ok
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : "border-zinc-200 bg-white text-zinc-500",
+                      ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-400"
+                      : "border-white/10 bg-white/5 text-white/30",
                   ].join(" ")}
                 >
                   {r.ok ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
@@ -251,19 +241,19 @@ export default function SignupForm() {
         </div>
 
         {errors.password?.message ? (
-          <div className="text-xs font-semibold text-red-600">{errors.password.message}</div>
+          <div className="text-xs font-semibold text-red-300">{errors.password.message}</div>
         ) : null}
       </div>
 
       <div className="flex items-center justify-between pt-3">
-        <Link href="/" className="text-sm font-semibold text-zinc-600 hover:underline">
+        <Link href="/" className="text-sm font-semibold text-white/50 transition hover:text-white/80">
           Voltar ao login
         </Link>
 
         <button
           type="submit"
           disabled={!isValid || isLoading}
-          className="inline-flex h-11 items-center justify-center rounded-2xl bg-emerald-600 px-9 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-11 items-center justify-center rounded-2xl bg-emerald-600 px-9 text-sm font-semibold text-white shadow-lg shadow-emerald-900/30 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isLoading ? (
             <span className="inline-flex items-center gap-2">
@@ -278,4 +268,3 @@ export default function SignupForm() {
     </form>
   );
 }
-
