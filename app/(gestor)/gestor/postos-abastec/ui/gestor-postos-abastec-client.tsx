@@ -1,19 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Filter, Fuel, Plus, Zap } from "lucide-react";
+import { Filter, Fuel, MapPin, Search, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import type { FuelAvailability, FuelType } from "@/app/(client)/postos-parceiros/lib/mock-stations";
-import type { ManualFuelRecord } from "@/app/(client)/postos-parceiros/lib/mock-history";
 import { ApiError } from "@/app/lib/api/api-client";
-import GestorAuditModal from "@/app/(gestor)/gestor/postos-abastec/components/gestor-audit-modal";
-import GestorManualRefuelModal from "@/app/(gestor)/gestor/postos-abastec/components/gestor-manual-refuel-modal";
-import GestorStationCard from "@/app/(gestor)/gestor/postos-abastec/components/gestor-station-card";
-import EmptyState from "@/components/ui/empty-state";
 import { useStations } from "@/app/lib/api/stations-hooks";
-import type { FuelFilter, GestorStation } from "@/app/(gestor)/gestor/postos-abastec/lib/mock-gestor-stations";
-import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -21,6 +15,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import EmptyState from "@/components/ui/empty-state";
+
+type FuelFilter = "TODOS" | FuelType;
+type StationStatus = "DISPONIVEL" | "INDISPONIVEL";
+type ViewStation = { id: string; name: string; city: string; status: StationStatus; fuels: FuelAvailability[] };
 
 function hashSeed(input: string) {
   let h = 2166136261;
@@ -38,192 +37,177 @@ function demoFuelStatus(seed: number): FuelAvailability["status"] {
   return "INDISPONIVEL";
 }
 
+function statusBadgeClass(s: StationStatus) {
+  return s === "DISPONIVEL"
+    ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+    : "bg-zinc-100 text-zinc-700 border-zinc-200";
+}
+
+function fuelDot(s: FuelAvailability["status"]) {
+  if (s === "OK") return "bg-emerald-500";
+  if (s === "LIMITADO") return "bg-amber-500";
+  return "bg-red-500";
+}
+
+function fuelTextColor(s: FuelAvailability["status"]) {
+  if (s === "OK") return "text-emerald-600";
+  if (s === "LIMITADO") return "text-amber-600";
+  return "text-red-600";
+}
+
 export default function GestorPostosAbastecClient() {
   const [fuelFilter, setFuelFilter] = useState<FuelFilter>("TODOS");
-  const apiStationsQuery = useStations({ include_inactive: true });
-  const [stations, setStations] = useState<GestorStation[]>([]);
-  const processedCreateIds = useRef<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
   const lastErrorRef = useRef<string | null>(null);
-
-  const [auditOpen, setAuditOpen] = useState(false);
-  const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
-
-  const [manualOpen, setManualOpen] = useState(false);
+  const stationsQuery = useStations({ include_inactive: true });
 
   useEffect(() => {
-    if (!apiStationsQuery.isError) return;
-    const err = apiStationsQuery.error;
+    if (!stationsQuery.isError) return;
+    const err = stationsQuery.error;
     const message = err instanceof ApiError ? err.message : "Falha ao carregar postos.";
     if (lastErrorRef.current === message) return;
     lastErrorRef.current = message;
     toast.error(message);
-  }, [apiStationsQuery.error, apiStationsQuery.isError]);
+  }, [stationsQuery.error, stationsQuery.isError]);
 
-  useEffect(() => {
-    if (!apiStationsQuery.data?.length) return;
-    setStations((prev) => {
-      const prevById = new Map(prev.map((s) => [s.id, s]));
-      return apiStationsQuery.data.map((s) => {
-        const prevStation = prevById.get(s.id);
-        const base = hashSeed(s.id);
-        const fuels: FuelAvailability[] =
-          prevStation?.fuels ??
-          [
-            { fuel: "Diesel", status: demoFuelStatus(base + 1) },
-            { fuel: "Gasolina 95", status: demoFuelStatus(base + 7) },
-            { fuel: "AdBlue", status: demoFuelStatus(base + 13) },
-          ];
-
-        return {
-          id: s.id,
-          name: s.name,
-          city: s.city,
-          status: s.is_active ? "DISPONIVEL" : "INDISPONIVEL",
-          updatedLabel: prevStation?.updatedLabel ?? "Agora mesmo",
-          fuels,
-          auditHistory: prevStation?.auditHistory ?? [],
-        };
-      });
+  const stations = useMemo<ViewStation[]>(() => {
+    if (!stationsQuery.data?.length) return [];
+    return stationsQuery.data.map((s) => {
+      const base = hashSeed(s.id);
+      return {
+        id: s.id,
+        name: s.name,
+        city: s.city,
+        status: s.is_active ? "DISPONIVEL" : "INDISPONIVEL",
+        fuels: [
+          { fuel: "Diesel" as FuelType, status: demoFuelStatus(base + 1) },
+          { fuel: "Gasolina 95" as FuelType, status: demoFuelStatus(base + 7) },
+          { fuel: "AdBlue" as FuelType, status: demoFuelStatus(base + 13) },
+        ],
+      };
     });
-  }, [apiStationsQuery.data]);
+  }, [stationsQuery.data]);
 
-  const filteredStations = useMemo(() => {
-    if (fuelFilter === "TODOS") return stations;
-    return stations.filter((s) => s.fuels.some((f) => f.fuel === fuelFilter && f.status === "OK"));
-  }, [fuelFilter, stations]);
-
-  const selectedStation = useMemo(() => {
-    if (!selectedStationId) return null;
-    return stations.find((s) => s.id === selectedStationId) ?? null;
-  }, [stations, selectedStationId]);
-
-  function openAudit(station: GestorStation) {
-    setSelectedStationId(station.id);
-    setAuditOpen(true);
-  }
-
-  function createManualRecord(args: {
-    createId: string;
-    stationId: string;
-    record: ManualFuelRecord;
-    fuel: FuelType;
-  }) {
-    if (processedCreateIds.current.has(args.createId)) return;
-    processedCreateIds.current.add(args.createId);
-
-    const baseStation = stations.find((s) => s.id === args.stationId) ?? null;
-    const stationName = baseStation?.name ?? "posto";
-    const nextCount = (baseStation?.auditHistory?.length ?? 0) + 1;
-
-    setStations((prev) =>
-      prev.map((s) => {
-        if (s.id !== args.stationId) return s;
-        return {
-          ...s,
-          updatedLabel: "Agora mesmo",
-          auditHistory: [args.record, ...(s.auditHistory ?? [])],
-          fuels: s.fuels.map((f): FuelAvailability =>
-            f.fuel === args.fuel ? { ...f, status: "OK" as const } : f,
-          ),
-        };
-      }),
-    );
-
-    toast.success(`Registo criado em ${stationName} (agora ${nextCount} registos).`);
-  }
+  const filtered = useMemo(() => {
+    return stations.filter((s) => {
+      if (fuelFilter !== "TODOS" && !s.fuels.some((f) => f.fuel === fuelFilter && f.status === "OK")) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        if (!s.name.toLowerCase().includes(q) && !s.city.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [fuelFilter, search, stations]);
 
   return (
-    <div className="w-full">
-      <GestorAuditModal
-        open={auditOpen}
-        onOpenChange={(v) => {
-          setAuditOpen(v);
-          if (!v) setSelectedStationId(null);
-        }}
-        stationId={selectedStationId}
-        stationName={selectedStation?.name ?? null}
-      />
-
-      <GestorManualRefuelModal
-        open={manualOpen}
-        onOpenChange={setManualOpen}
-        stations={stations}
-        defaultStationId={selectedStationId}
-        defaultFuel={fuelFilter === "TODOS" ? undefined : fuelFilter}
-        onCreate={createManualRecord}
-      />
-
-      <div className="mx-auto w-full max-w-[1240px]">
-        <div className="flex items-start justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-extrabold text-zinc-900">Rede de Postos Pumangol</h1>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">
-                <Zap className="h-3.5 w-3.5" />
-                Monitorização Ativa
-              </span>
-            </div>
-            <p className="mt-1 text-sm font-medium text-zinc-500">
-              Controlo centralizado de abastecimentos manuais e auditoria de rede.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button
-              type="button"
-              className="h-11 rounded-xl bg-[#0B1220] px-5 font-extrabold text-white hover:bg-[#101a2e]"
-              onClick={() => setManualOpen(true)}
-            >
-              <Plus className="h-4 w-4" />
-              REGISTAR ABASTECIMENTO MANUAL
-            </Button>
-
-            <Select value={fuelFilter} onValueChange={(v) => setFuelFilter(v as FuelFilter)}>
-              <SelectTrigger className="w-[240px]">
-                <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-zinc-500" />
-                  <SelectValue className="truncate" placeholder="Todos os Combustíveis" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="TODOS">Todos os Combustíveis</SelectItem>
-                <SelectItem value="Diesel">Diesel</SelectItem>
-                <SelectItem value="Gasolina 95">Gasolina 95</SelectItem>
-                <SelectItem value="AdBlue">AdBlue</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+    <div className="mx-auto w-full max-w-[1240px] space-y-6">
+      {/* Header */}
+      <div className="rounded-2xl border border-zinc-100/60 bg-white px-6 py-5 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+        <div className="flex items-center gap-2">
+          <div className="text-lg font-extrabold text-zinc-900">Postos de Abastecimento</div>
+          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">
+            <Zap className="h-3 w-3" />
+            AO VIVO
+          </span>
         </div>
-
-        {apiStationsQuery.isLoading ? (
-          <div className="mt-5 rounded-2xl border border-zinc-100/60 bg-white p-5 text-sm font-semibold text-zinc-500 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
-            <span className="inline-flex items-center gap-2">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
-              A carregar postos...
-            </span>
-          </div>
-        ) : null}
-
-        {!apiStationsQuery.isLoading && filteredStations.length === 0 ? (
-          <div className="mt-6">
-            <EmptyState
-              icon={Fuel}
-              title="Nenhum posto encontrado"
-              description="Os postos da rede vão aparecer aqui assim que estiverem disponíveis na API."
-            />
-          </div>
-        ) : (
-          <div className="mt-6 grid gap-5 lg:grid-cols-3">
-            {filteredStations.map((s) => (
-              <GestorStationCard
-                key={`${s.id}-${s.auditHistory?.length ?? 0}`}
-                station={s}
-                onOpenAudit={openAudit}
-              />
-            ))}
-          </div>
-        )}
+        <div className="mt-1 text-sm font-semibold text-zinc-500">
+          Disponibilidade de combustível nos postos da rede Pumangol.
+        </div>
       </div>
+
+      {/* Filters */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Pesquisar por nome ou cidade..."
+            className="h-11 rounded-2xl pl-10"
+          />
+        </div>
+        <Select value={fuelFilter} onValueChange={(v) => setFuelFilter(v as FuelFilter)}>
+          <SelectTrigger className="h-11 w-52 rounded-2xl">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-zinc-400" />
+              <SelectValue placeholder="Combustível" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="TODOS">Todos os combustíveis</SelectItem>
+            <SelectItem value="Diesel">Diesel</SelectItem>
+            <SelectItem value="Gasolina 95">Gasolina 95</SelectItem>
+            <SelectItem value="AdBlue">AdBlue</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Loading */}
+      {stationsQuery.isLoading && (
+        <div className="rounded-2xl border border-zinc-100/60 bg-white px-6 py-12 text-center shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+          <span className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-400">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+            A carregar postos...
+          </span>
+        </div>
+      )}
+
+      {/* Empty */}
+      {!stationsQuery.isLoading && filtered.length === 0 && (
+        <div className="rounded-2xl border border-zinc-100/60 bg-white shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+          <EmptyState
+            icon={Fuel}
+            title="Nenhum posto encontrado"
+            description="Ajusta os filtros ou tenta novamente mais tarde."
+          />
+        </div>
+      )}
+
+      {/* Stations grid */}
+      {!stationsQuery.isLoading && filtered.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((s) => (
+            <div
+              key={s.id}
+              className="rounded-2xl border border-zinc-100/60 bg-white p-5 shadow-[0_4px_20px_rgb(0,0,0,0.01)]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                  <Fuel className="h-5 w-5" />
+                </div>
+                <span className={`inline-flex rounded-md border px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest ${statusBadgeClass(s.status)}`}>
+                  {s.status === "DISPONIVEL" ? "DISPONÍVEL" : "INDISPONÍVEL"}
+                </span>
+              </div>
+
+              <div className="mt-4 text-sm font-extrabold text-zinc-900">{s.name}</div>
+              <div className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-zinc-400">
+                <MapPin className="h-3.5 w-3.5" />
+                {s.city}
+              </div>
+
+              <div className="my-4 h-px bg-zinc-100" />
+
+              <div className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400">
+                Disponibilidade
+              </div>
+              <div className="mt-2.5 space-y-2">
+                {s.fuels.map((f) => (
+                  <div key={f.fuel} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-zinc-600">
+                      <span className={`h-2 w-2 rounded-full ${fuelDot(f.status)}`} />
+                      {f.fuel}
+                    </div>
+                    <div className={`text-[10px] font-extrabold uppercase tracking-widest ${fuelTextColor(f.status)}`}>
+                      {f.status}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

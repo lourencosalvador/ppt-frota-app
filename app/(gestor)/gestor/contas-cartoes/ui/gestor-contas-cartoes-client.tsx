@@ -362,7 +362,7 @@ export default function GestorContasCartoesClient() {
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Nome ou Matricula..."
+                  placeholder="Nome ou cartão..."
                   className="h-11 rounded-xl bg-zinc-800 pl-10 text-white border-zinc-700 placeholder:text-zinc-400 focus-visible:ring-white/10"
                 />
               </div>

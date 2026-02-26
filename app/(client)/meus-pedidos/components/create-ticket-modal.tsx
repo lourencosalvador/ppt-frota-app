@@ -34,12 +34,6 @@ function sleep(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms));
 }
 
-function formatMatricula(raw: string) {
-  const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
-  const parts = cleaned.match(/.{1,2}/g) ?? [];
-  return parts.join("-");
-}
-
 function toTicketType(v: string): TicketType {
   switch (v) {
     case "PEDIDO_CARTAO":
@@ -87,7 +81,6 @@ const ticketSchema = z.object({
   requestType: z.enum(["PEDIDO_CARTAO", "ABASTECIMENTO_MANUAL", "SUPORTE", "CARREGAMENTO", "OUTRO"]),
   subject: z.string().trim().min(1, "O Assunto é obrigatório."),
   priority: z.enum(["Urgente", "Alta", "Normal", "Baixa"]),
-  matricula: z.string(),
   description: z.string().trim().min(1, "A Descrição Detalhada é obrigatória."),
 });
 
@@ -131,7 +124,6 @@ export default function CreateTicketModal({
       requestType: "PEDIDO_CARTAO",
       subject: "",
       priority: "Normal",
-      matricula: "",
       description: "",
     },
   });
@@ -147,7 +139,6 @@ export default function CreateTicketModal({
       requestType: "PEDIDO_CARTAO",
       subject: "",
       priority: "Normal",
-      matricula: "",
       description: "",
     });
     setFileName(null);
@@ -167,7 +158,6 @@ export default function CreateTicketModal({
         form.set("subject", values.subject.trim());
         form.set("priority", priorityToApi(values.priority));
         if (values.description?.trim()) form.set("description", values.description.trim());
-        if (values.matricula?.trim()) form.set("vehicle_registration", values.matricula.trim().toUpperCase());
         if (file) form.set("attachment", file);
 
         const created = await createTicket.mutateAsync(form);
@@ -183,10 +173,7 @@ export default function CreateTicketModal({
       // fallback local (demo)
       await sleep(900);
       const status: TicketStatus = values.requestType === "PEDIDO_CARTAO" ? "EM ANALISE" : "ABERTO";
-      const matriculaValue = (values.matricula ?? "").trim();
-      const fullSubject = matriculaValue
-        ? `${values.subject.trim()} (${matriculaValue.toUpperCase()})`
-        : values.subject.trim();
+      const fullSubject = values.subject.trim();
       const requestTypeLabel =
         values.requestType === "PEDIDO_CARTAO"
           ? "Pedido de Cartão Frota+"
@@ -209,7 +196,6 @@ export default function CreateTicketModal({
         status,
         createdAt: new Date().toISOString().slice(0, 10),
         description: values.description.trim(),
-        matricula: matriculaValue ? matriculaValue.toUpperCase() : undefined,
         attachmentName: fileName ?? undefined,
         requestTypeLabel,
       };
@@ -286,44 +272,25 @@ export default function CreateTicketModal({
             ) : null}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Prioridade</Label>
-              <Controller
-                control={control}
-                name="priority"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 focus:ring-white/10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Urgente">Urgente</SelectItem>
-                  <SelectItem value="Alta">Alta</SelectItem>
-                  <SelectItem value="Normal">Normal</SelectItem>
-                  <SelectItem value="Baixa">Baixa</SelectItem>
-                </SelectContent>
-              </Select>
-                )}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Matricula (Op)</Label>
-              <Controller
-                control={control}
-                name="matricula"
-                render={({ field }) => (
-              <Input
-                    value={field.value ?? ""}
-                    onChange={(e) => field.onChange(formatMatricula(e.target.value))}
-                placeholder="AA-00-BB"
-                className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 placeholder:text-zinc-400 focus-visible:ring-white/10"
-                inputMode="text"
-                  />
-                )}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label>Prioridade</Label>
+            <Controller
+              control={control}
+              name="priority"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger className="h-12 rounded-xl bg-zinc-800 text-white border-zinc-700 focus:ring-white/10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Urgente">Urgente</SelectItem>
+                    <SelectItem value="Alta">Alta</SelectItem>
+                    <SelectItem value="Normal">Normal</SelectItem>
+                    <SelectItem value="Baixa">Baixa</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </div>
 
           <div className="space-y-2">

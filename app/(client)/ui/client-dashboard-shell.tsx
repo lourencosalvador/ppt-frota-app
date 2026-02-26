@@ -9,7 +9,8 @@ import ClientTopbar from "@/app/(client)/ui/topbar/client-topbar";
 
 const TITLE_BY_PATH: Record<string, string> = {
   "/painel": "Meu Painel",
-  "/meu-cartao": "Meu Cartão",
+  "/historico": "Histórico de Abastecimentos",
+  "/postos": "Postos de Abastecimento",
   "/configuracoes": "Configurações",
 };
 
@@ -25,15 +26,15 @@ export default function ClientDashboardShell({
   const notifications = [
     {
       id: "n1",
-      title: "Bem-vindo, Lorrys",
+      title: `Bem-vindo, ${session.name?.split(" ")[0] ?? "Colaborador"}`,
       description: "A tua conta está pronta para usar.",
       timeLabel: "AGORA",
       unread: true,
     },
     {
       id: "n2",
-      title: "Pedido em análise",
-      description: "Estamos a analisar o teu pedido mais recente.",
+      title: "Cartão atribuído",
+      description: "O teu cartão de frota já está disponível.",
       timeLabel: "HOJE",
       unread: false,
     },

@@ -4,7 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Filter, Fuel, MapPin, Search, Zap } from "lucide-react";
 import { toast } from "sonner";
 
-import type { FuelAvailability, FuelType } from "@/app/(client)/postos-parceiros/lib/mock-stations";
+import type {
+  FuelAvailability,
+  FuelType,
+  PartnerStation,
+} from "@/app/(client)/postos-parceiros/lib/mock-stations";
 import { ApiError } from "@/app/lib/api/api-client";
 import { useStations } from "@/app/lib/api/stations-hooks";
 import { Input } from "@/components/ui/input";
@@ -18,8 +22,6 @@ import {
 import EmptyState from "@/components/ui/empty-state";
 
 type FuelFilter = "TODOS" | FuelType;
-type StationStatus = "DISPONIVEL" | "INDISPONIVEL";
-type ViewStation = { id: string; name: string; city: string; status: StationStatus; fuels: FuelAvailability[] };
 
 function hashSeed(input: string) {
   let h = 2166136261;
@@ -32,34 +34,52 @@ function hashSeed(input: string) {
 
 function demoFuelStatus(seed: number): FuelAvailability["status"] {
   const r = seed % 100;
-  if (r < 74) return "OK";
-  if (r < 90) return "LIMITADO";
+  if (r < 72) return "OK";
+  if (r < 88) return "LIMITADO";
   return "INDISPONIVEL";
 }
 
-function statusBadgeClass(s: StationStatus) {
-  return s === "DISPONIVEL"
+function mapStationToUi(s: { id: string; name: string; city: string; is_active: boolean }): PartnerStation {
+  const base = hashSeed(s.id);
+  const fuels: FuelAvailability[] = [
+    { fuel: "Diesel", status: demoFuelStatus(base + 1) },
+    { fuel: "Gasolina 95", status: demoFuelStatus(base + 7) },
+    { fuel: "AdBlue", status: demoFuelStatus(base + 13) },
+  ];
+
+  return {
+    id: s.id,
+    name: s.name,
+    city: s.city,
+    status: s.is_active ? "DISPONIVEL" : "INDISPONIVEL",
+    updatedLabel: "Agora mesmo",
+    fuels,
+  };
+}
+
+function statusBadgeClass(status: PartnerStation["status"]) {
+  return status === "DISPONIVEL"
     ? "bg-emerald-50 text-emerald-700 border-emerald-100"
     : "bg-zinc-100 text-zinc-700 border-zinc-200";
 }
 
-function fuelDot(s: FuelAvailability["status"]) {
-  if (s === "OK") return "bg-emerald-500";
-  if (s === "LIMITADO") return "bg-amber-500";
+function fuelDot(status: FuelAvailability["status"]) {
+  if (status === "OK") return "bg-emerald-500";
+  if (status === "LIMITADO") return "bg-amber-500";
   return "bg-red-500";
 }
 
-function fuelTextColor(s: FuelAvailability["status"]) {
-  if (s === "OK") return "text-emerald-600";
-  if (s === "LIMITADO") return "text-amber-600";
+function fuelTextColor(status: FuelAvailability["status"]) {
+  if (status === "OK") return "text-emerald-600";
+  if (status === "LIMITADO") return "text-amber-600";
   return "text-red-600";
 }
 
-export default function SuporteStatusPostosClient() {
+export default function ColaboradorPostosClient() {
   const [fuelFilter, setFuelFilter] = useState<FuelFilter>("TODOS");
   const [search, setSearch] = useState("");
+  const stationsQuery = useStations();
   const lastErrorRef = useRef<string | null>(null);
-  const stationsQuery = useStations({ include_inactive: true });
 
   useEffect(() => {
     if (!stationsQuery.isError) return;
@@ -70,22 +90,9 @@ export default function SuporteStatusPostosClient() {
     toast.error(message);
   }, [stationsQuery.error, stationsQuery.isError]);
 
-  const stations = useMemo<ViewStation[]>(() => {
+  const stations = useMemo<PartnerStation[]>(() => {
     if (!stationsQuery.data?.length) return [];
-    return stationsQuery.data.map((s) => {
-      const base = hashSeed(s.id);
-      return {
-        id: s.id,
-        name: s.name,
-        city: s.city,
-        status: s.is_active ? "DISPONIVEL" : "INDISPONIVEL",
-        fuels: [
-          { fuel: "Diesel" as FuelType, status: demoFuelStatus(base + 1) },
-          { fuel: "Gasolina 95" as FuelType, status: demoFuelStatus(base + 7) },
-          { fuel: "AdBlue" as FuelType, status: demoFuelStatus(base + 13) },
-        ],
-      };
-    });
+    return stationsQuery.data.map((s) => mapStationToUi(s));
   }, [stationsQuery.data]);
 
   const filtered = useMemo(() => {
@@ -104,14 +111,14 @@ export default function SuporteStatusPostosClient() {
       {/* Header */}
       <div className="rounded-2xl border border-zinc-100/60 bg-white px-6 py-5 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
         <div className="flex items-center gap-2">
-          <div className="text-lg font-extrabold text-zinc-900">Rede de Postos Pumangol</div>
-          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">
+          <div className="text-lg font-extrabold text-zinc-900">Postos de Abastecimento</div>
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest text-emerald-700 border border-emerald-100">
             <Zap className="h-3 w-3" />
-            Monitorização Ativa
+            AO VIVO
           </span>
         </div>
         <div className="mt-1 text-sm font-semibold text-zinc-500">
-          Visibilidade em tempo real da disponibilidade de combustível na rede.
+          Consulta a disponibilidade de combustível nos postos da rede Pumangol.
         </div>
       </div>
 
@@ -152,7 +159,7 @@ export default function SuporteStatusPostosClient() {
         </div>
       )}
 
-      {/* Empty */}
+      {/* Stations grid */}
       {!stationsQuery.isLoading && filtered.length === 0 && (
         <div className="rounded-2xl border border-zinc-100/60 bg-white shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
           <EmptyState
@@ -163,7 +170,6 @@ export default function SuporteStatusPostosClient() {
         </div>
       )}
 
-      {/* Stations grid */}
       {!stationsQuery.isLoading && filtered.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((s) => (
@@ -175,7 +181,9 @@ export default function SuporteStatusPostosClient() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
                   <Fuel className="h-5 w-5" />
                 </div>
-                <span className={`inline-flex rounded-md border px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest ${statusBadgeClass(s.status)}`}>
+                <span
+                  className={`inline-flex rounded-md border px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-widest ${statusBadgeClass(s.status)}`}
+                >
                   {s.status === "DISPONIVEL" ? "DISPONÍVEL" : "INDISPONÍVEL"}
                 </span>
               </div>

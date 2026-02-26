@@ -136,15 +136,6 @@ export default function LoginForm() {
         </button>
       </div>
 
-      <div className="pt-3 text-sm text-white/40">
-        Ainda não tens conta?{" "}
-        <Link
-          href="/criar-conta"
-          className="font-semibold text-emerald-400 transition hover:text-emerald-300"
-        >
-          Criar conta
-        </Link>
-      </div>
     </form>
   );
 }

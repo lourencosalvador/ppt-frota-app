@@ -50,6 +50,14 @@ export function uiPriorityToApi(priority: Ticket["priority"]): TicketPriority {
   return "normal";
 }
 
+function apiImpactToUi(impact: string | undefined | null): Ticket["impact"] {
+  if (!impact) return undefined;
+  const lower = impact.toLowerCase();
+  if (lower === "high" || lower === "alto") return "Alto";
+  if (lower === "low" || lower === "baixo") return "Baixo";
+  return "Médio";
+}
+
 export function apiTicketToUi(ticket: ApiTicket, requesterRole = "Cliente"): Ticket {
   return {
     id: ticket.id,
@@ -58,7 +66,10 @@ export function apiTicketToUi(ticket: ApiTicket, requesterRole = "Cliente"): Tic
     type: apiTypeToUi(ticket.ticket_type),
     requester: ticket.requested_by_name || ticket.requested_by_email,
     requesterRole,
+    fleet: ticket.company_name || undefined,
     priority: apiPriorityToUi(ticket.priority),
+    impact: apiImpactToUi(ticket.impact),
+    assignedTo: ticket.assigned_to,
     status: apiStatusToUi(ticket.status),
     createdAt: ticket.created_at.slice(0, 10),
     description: ticket.description,

@@ -3,7 +3,8 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
-  CreditCard,
+  Fuel,
+  History,
   LayoutGrid,
   LogOut,
   Settings,
@@ -50,7 +51,8 @@ export default function ClientSidebar({ session }: { session: AppSession }) {
 
         <nav className="mt-3 space-y-1">
           <NavItem href="/painel" icon={LayoutGrid} label="Meu Painel" />
-          <NavItem href="/meu-cartao" icon={CreditCard} label="Meu Cartão" />
+          <NavItem href="/historico" icon={History} label="Histórico de Abastec." />
+          <NavItem href="/postos" icon={Fuel} label="Postos de Abastecimento" />
         </nav>
 
         <div className="mt-8 px-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
@@ -94,4 +96,3 @@ export default function ClientSidebar({ session }: { session: AppSession }) {
     </aside>
   );
 }
-

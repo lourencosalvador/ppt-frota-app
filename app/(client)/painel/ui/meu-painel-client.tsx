@@ -1,271 +1,187 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, CreditCard, Fuel, MapPin, Sparkles, Ticket } from "lucide-react";
-import { toast } from "sonner";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowRight, CreditCard, Clock, ShieldCheck, MapPin } from "lucide-react";
 
 import { getStoredSession, type AppSession } from "@/app/lib/auth/session";
-import { ApiError } from "@/app/lib/api/api-client";
 import { useCards } from "@/app/lib/api/cards-hooks";
-import { useTickets } from "@/app/lib/api/tickets-hooks";
-import { useDashboard } from "@/app/lib/api/dashboard-hooks";
+import type { ApiCard } from "@/app/lib/api/cards";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
-import ActivityCard from "@/app/(client)/painel/components/activity-card";
-import HistoryPanel from "@/app/(client)/painel/components/history-panel";
-import QuickActions from "@/app/(client)/painel/components/quick-actions";
-import StatCards from "@/app/(client)/painel/components/stat-cards";
-import SupportAIWidget from "@/app/(client)/painel/components/support-ai-widget";
-import UserSummaryCard from "@/app/(client)/painel/components/user-summary-card";
-
-import type { StatCard, HistoryItem } from "@/app/(client)/painel/lib/types";
-
-/* ── Quick-action config (static UI, not data) ── */
-const quickActions = [
-  { id: "new_fuel", icon: Fuel, title: "Novo", subtitle: "Abastecimento", kind: "success" as const },
-  { id: "cards", icon: CreditCard, title: "Ver", subtitle: "Cartões", kind: "info" as const },
-  { id: "stations", icon: MapPin, title: "Localizar", subtitle: "Postos", kind: "violet" as const },
-  { id: "support_ai", icon: Bot, title: "Suporte IA", subtitle: "Urgente", kind: "danger" as const },
-];
-
-/* ── Helpers ── */
-function parseKz(v: string | undefined | null): number {
-  if (!v) return 0;
-  return Number(String(v).replace(/[^\d.,-]/g, "").replace(",", ".")) || 0;
+function formatKz(v: string | number | undefined | null): string {
+  if (!v) return "0,00KZS";
+  const n = typeof v === "number" ? v : Number(String(v).replace(/[^\d.,-]/g, "").replace(",", ".")) || 0;
+  return `${new Intl.NumberFormat("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)}KZS`;
 }
 
-function formatKz(v: number): string {
-  return `Kz ${new Intl.NumberFormat("pt-AO", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v)}`;
+function formatCardNumber(uid: string | undefined): string {
+  if (!uid) return "— — — —";
+  const clean = uid.replace(/\s/g, "");
+  return clean.replace(/(.{4})/g, "$1 ").trim();
 }
 
-function getTodayLabel() {
+function formatExpiry(iso: string | undefined): string {
+  if (!iso) return "—";
   try {
-    const d = new Date();
-    return new Intl.DateTimeFormat("pt-PT", {
-      weekday: "long",
-      day: "2-digit",
-      month: "long",
-    })
-      .format(d)
-      .toUpperCase();
+    const d = new Date(iso);
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yy = String(d.getFullYear()).slice(-2);
+    return `${mm}/${yy}`;
   } catch {
-    return "";
+    return "—";
   }
 }
 
-function statusLabel(apiStatus: string): string {
-  const map: Record<string, string> = {
-    open: "ABERTO",
-    in_analysis: "EM ANÁLISE",
-    assigned: "ATRIBUÍDO",
-    resolved: "RESOLVIDO",
-    closed: "CONCLUÍDO",
-    reopened: "REABERTO",
-  };
-  return map[apiStatus] ?? apiStatus.toUpperCase();
-}
+const statusMap: Record<string, { label: string; color: string }> = {
+  approved: { label: "APROVADO", color: "text-emerald-700" },
+  completed: { label: "APROVADO", color: "text-emerald-700" },
+  active: { label: "APROVADO", color: "text-emerald-700" },
+  pending: { label: "APROVADO", color: "text-amber-700" },
+  rejected: { label: "REJEITADO", color: "text-red-600" },
+  cancelled: { label: "REJEITADO", color: "text-red-600" },
+};
+
+const mockTransactions = [
+  { id: "t1", litros: "20L", data: "21/01 2026", valor: "14.000KZS", posto: "PUMANGOL VIANA", status: "rejected" },
+  { id: "t2", litros: "3L", data: "12/01 2026", valor: "10.800KZS", posto: "PUMANGOL MAIANGA", status: "approved" },
+  { id: "t3", litros: "44L", data: "21/12 2025", valor: "22.800KZS", posto: "PUMANGOL CACUACO", status: "approved" },
+  { id: "t4", litros: "3L", data: "21/06/2026", valor: "5.000KZS", posto: "PUMANGOL SAMBA", status: "approved" },
+  { id: "t5", litros: "44L", data: "01/12 2025", valor: "80.000KZS", posto: "PUMANGOL BOA LUZ", status: "rejected" },
+];
 
 export default function MeuPainelClient() {
   const [session, setSession] = useState<AppSession | null>(null);
-  const [supportOpen, setSupportOpen] = useState(false);
-  const lastErrorRef = useRef<string | null>(null);
 
   useEffect(() => {
     setSession(getStoredSession());
   }, []);
 
-  const name = session?.name ?? "Cliente";
-  const today = useMemo(() => getTodayLabel(), []);
-
-  /* ── API queries ── */
+  const name = session?.name ?? "Colaborador";
   const cardsQuery = useCards();
-  const ticketsQuery = useTickets({ page: 1, page_size: 50 });
-  const dashboardQuery = useDashboard("month");
 
-  /* ── Toast errors (deduplicated) ── */
-  useEffect(() => {
-    const errors: string[] = [];
-    if (cardsQuery.isError) {
-      const err = cardsQuery.error;
-      errors.push(err instanceof ApiError ? err.message : "Falha ao carregar cartões.");
-    }
-    if (ticketsQuery.isError) {
-      const err = ticketsQuery.error;
-      errors.push(err instanceof ApiError ? err.message : "Falha ao carregar tickets.");
-    }
-    // Dashboard may 403 for clients — that's ok, we just don't show the chart
-    const combined = errors.join("|");
-    if (!combined || lastErrorRef.current === combined) return;
-    lastErrorRef.current = combined;
-    for (const msg of errors) toast.error(msg);
-  }, [cardsQuery.isError, cardsQuery.error, ticketsQuery.isError, ticketsQuery.error]);
-
-  /* ── Derived: primary card info ── */
-  const primaryCard = useMemo(() => {
+  const card: ApiCard | null = useMemo(() => {
     if (!cardsQuery.data?.length) return null;
-    // Prefer the first active card
-    const active = cardsQuery.data.find((c) => c.status === "active");
-    return active ?? cardsQuery.data[0];
+    return cardsQuery.data.find((c) => c.status === "active") ?? cardsQuery.data[0];
   }, [cardsQuery.data]);
 
-  const companyName = primaryCard?.company_name ?? undefined;
-
-  const totalBalance = useMemo(() => {
-    if (!cardsQuery.data?.length) return 0;
-    return cardsQuery.data.reduce((acc, c) => acc + parseKz(c.current_balance), 0);
-  }, [cardsQuery.data]);
-
-  /* ── Derived: tickets ── */
-  const allTickets = ticketsQuery.data ?? [];
-  const pendingTickets = useMemo(() => {
-    return allTickets.filter((t) => t.status === "open" || t.status === "in_analysis" || t.status === "assigned");
-  }, [allTickets]);
-
-  /* ── Stat cards from real data ── */
-  const statCardsData = useMemo<StatCard[]>(() => {
-    const cardUid = primaryCard?.uid;
-    const lastFour = cardUid ? cardUid.slice(-4) : "—";
-
-    return [
-      {
-        icon: CreditCard,
-        iconBgClass: "bg-blue-50",
-        iconClass: "text-blue-700",
-        badge: primaryCard?.status === "active"
-          ? { label: "OK", className: "bg-emerald-50 text-emerald-700" }
-          : primaryCard?.status === "blocked"
-            ? { label: "Bloqueado", className: "bg-red-50 text-red-700" }
-            : undefined,
-        value: formatKz(totalBalance),
-        title: "Saldo Disponível",
-        subtitle: `Cartão final ${lastFour}`,
-      },
-      {
-        icon: Fuel,
-        iconBgClass: "bg-emerald-50",
-        iconClass: "text-emerald-700",
-        badge: dashboardQuery.data?.cost_efficiency_status
-          ? { label: dashboardQuery.data.cost_efficiency_status, className: "bg-emerald-50 text-emerald-700" }
-          : undefined,
-        value: dashboardQuery.data?.cost_efficiency ?? "—",
-        title: "Eficiência de Custo",
-        subtitle: dashboardQuery.data?.market_average
-          ? `Média mercado: ${dashboardQuery.data.market_average}`
-          : "Dados do dashboard",
-      },
-      {
-        icon: Ticket,
-        iconBgClass: "bg-amber-50",
-        iconClass: "text-amber-700",
-        value: String(pendingTickets.length),
-        title: "Solicitações",
-        subtitle: "Pendentes de aprovação",
-      },
-      {
-        icon: Sparkles,
-        iconBgClass: "bg-violet-50",
-        iconClass: "text-violet-700",
-        value: dashboardQuery.data?.sla_performance
-          ? `${dashboardQuery.data.sla_performance}%`
-          : "—",
-        title: "Performance SLA",
-        subtitle: dashboardQuery.data?.sla_performance_label || "—",
-      },
-    ];
-  }, [primaryCard, totalBalance, pendingTickets.length, dashboardQuery.data]);
-
-  /* ── History items from recent tickets ── */
-  const historyItems = useMemo<HistoryItem[]>(() => {
-    // Take the 3 most recent tickets
-    const recent = [...allTickets]
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .slice(0, 3);
-
-    return recent.map((t) => {
-      const isRefuel = t.ticket_type === "manual_refuel";
-      const isTopup = t.ticket_type === "account_topup";
-      return {
-        title: t.subject || t.ticket_type_display,
-        meta: `${new Date(t.created_at).toLocaleDateString("pt-PT")} • ${t.company_name || "—"}`,
-        amount: isTopup ? "+ Carregamento" : isRefuel ? "- Abastecimento" : t.ticket_code,
-        amountClass: isTopup ? "text-emerald-700" : "text-zinc-700",
-        icon: isRefuel ? Fuel : CreditCard,
-        iconWrapClass: isTopup ? "bg-emerald-50" : "bg-zinc-100",
-        iconClass: isTopup ? "text-emerald-700" : "text-zinc-600",
-      };
-    });
-  }, [allTickets]);
-
-  /* ── Recent requests for sidebar ── */
-  const recentRequests = useMemo(() => {
-    const recent = [...allTickets]
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .slice(0, 3);
-
-    return recent.map((t) => ({
-      title: (t.subject || t.ticket_type_display).slice(0, 24) + ((t.subject || "").length > 24 ? "..." : ""),
-      status: statusLabel(t.status),
-    }));
-  }, [allTickets]);
-
-  /* ── Chart data from dashboard daily costs ── */
-  const chartData = useMemo(() => {
-    if (!dashboardQuery.data?.daily_costs?.length) return [];
-    return dashboardQuery.data.daily_costs.map((d) => ({
-      day: d.day,
-      value: Number(d.cost) || 0,
-    }));
-  }, [dashboardQuery.data]);
-
-  const isLoading = cardsQuery.isLoading || ticketsQuery.isLoading;
+  const cardStatusLabel = card?.status === "active" ? "ATIVO" : card?.status === "blocked" ? "BLOQUEADO" : card?.status ? card.status.toUpperCase() : "—";
+  const cardStatusColor = card?.status === "active" ? "text-emerald-700" : card?.status === "blocked" ? "text-red-600" : "text-zinc-600";
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-6">
-      <UserSummaryCard
-        todayLabel={today}
-        name={name}
-        companyName={companyName}
-        vehicleRegistration={primaryCard?.uid ? `${primaryCard.uid.slice(0, 4)}...${primaryCard.uid.slice(-4)}` : undefined}
-      />
-
-      {isLoading ? (
-        <div className="rounded-2xl border border-zinc-100/60 bg-white p-6 text-sm font-semibold text-zinc-500 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
-          <span className="inline-flex items-center gap-2">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
-            A carregar dados do painel...
-          </span>
-        </div>
-      ) : null}
-
-      <StatCards cards={statCardsData} />
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-6">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-            <span className="text-amber-500 text-sm">⚡</span> Acesso Rápido
+    <div className="mx-auto w-full max-w-[1240px] space-y-6">
+      {/* Welcome banner */}
+      <div className="overflow-hidden rounded-2xl bg-linear-to-r from-emerald-600 to-emerald-500 px-8 py-7 shadow-[0_4px_20px_rgb(16,185,129,0.15)]">
+        <div className="flex items-center gap-5">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20">
+            <MapPin className="h-7 w-7 text-white" />
           </div>
-
-          <QuickActions
-            actions={quickActions}
-            onAction={(a) => {
-              if (a.id === "support_ai") setSupportOpen(true);
-            }}
-          />
-
-          <ActivityCard data={chartData} isLoading={dashboardQuery.isLoading} />
-        </div>
-
-        <div className="space-y-4">
-          {dashboardQuery.data?.cost_efficiency ? (
-            <div className="flex justify-end">
-              <div className="text-[13px] font-bold text-zinc-900">{dashboardQuery.data.cost_efficiency}</div>
+          <div className="flex-1">
+            <div className="text-lg font-extrabold text-white sm:text-xl">
+              OLÁ, SR {name.toUpperCase()} BEM-VINDO DE VOLTA
             </div>
-          ) : null}
-
-          <HistoryPanel items={historyItems} recentRequests={recentRequests} />
+            <div className="mt-3 flex flex-wrap items-center gap-x-10 gap-y-2">
+              <div>
+                <div className="text-[10px] font-extrabold uppercase tracking-widest text-white/50">Número do Cartão</div>
+                <div className="mt-0.5 text-sm font-extrabold tracking-wider text-white">
+                  {formatCardNumber(card?.uid)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-extrabold uppercase tracking-widest text-white/50">Data de Validação</div>
+                <div className="mt-0.5 text-sm font-extrabold text-white">
+                  {formatExpiry(card?.expires_at)}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <SupportAIWidget open={supportOpen} onOpenChange={setSupportOpen} name={name} />
+      {/* KPI cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-2xl border border-zinc-100/60 bg-white p-5 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+            <CreditCard className="h-5 w-5" />
+          </div>
+          <div className="mt-4 text-xs font-semibold uppercase tracking-widest text-zinc-500">Saldo Disponível</div>
+          <div className="mt-1 text-2xl font-extrabold text-zinc-900">{formatKz(card?.current_balance)}</div>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-100/60 bg-white p-5 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+            <Clock className="h-5 w-5" />
+          </div>
+          <div className="mt-4 text-xs font-semibold uppercase tracking-widest text-zinc-500">Limite Diário</div>
+          <div className="mt-1 text-2xl font-extrabold text-zinc-900">{formatKz(card?.daily_limit)}</div>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-100/60 bg-white p-5 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-600">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div className={`mt-4 text-2xl font-extrabold ${cardStatusColor}`}>{cardStatusLabel}</div>
+          <div className="mt-1 text-xs font-semibold uppercase tracking-widest text-zinc-400">Status Cartão</div>
+        </div>
+      </div>
+
+      {/* Últimos Abastecimentos */}
+      <div className="rounded-2xl border border-zinc-100/60 bg-white shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
+        <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-5">
+          <div className="text-sm font-extrabold uppercase tracking-widest text-zinc-900">Últimos Abastecimentos</div>
+          <Link
+            href="/historico"
+            className="inline-flex items-center gap-1.5 text-xs font-extrabold text-emerald-600 transition hover:text-emerald-700"
+          >
+            Ver mais
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        {cardsQuery.isLoading ? (
+          <div className="px-6 py-12 text-center text-sm font-semibold text-zinc-400">
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-emerald-600" />
+              A carregar...
+            </span>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-widest">Quantidade/Litros</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-widest">Data</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-widest">Valor/KZS</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-widest">Posto de Abastecimento</TableHead>
+                <TableHead className="text-[10px] font-extrabold uppercase tracking-widest">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {mockTransactions.map((tx) => {
+                const st = statusMap[tx.status] ?? { label: tx.status.toUpperCase(), color: "text-zinc-600" };
+                return (
+                  <TableRow key={tx.id}>
+                    <TableCell className="text-sm font-semibold text-zinc-900">{tx.litros}</TableCell>
+                    <TableCell className="text-sm font-semibold text-zinc-600">{tx.data}</TableCell>
+                    <TableCell className="text-sm font-semibold text-zinc-900">{tx.valor}</TableCell>
+                    <TableCell className="text-sm font-semibold text-zinc-600">{tx.posto}</TableCell>
+                    <TableCell>
+                      <span className={`text-xs font-extrabold ${st.color}`}>{st.label}</span>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </div>
     </div>
   );
 }

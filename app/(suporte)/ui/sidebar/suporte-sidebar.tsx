@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { LayoutGrid, LogOut, MapPinned, Settings, Users, Ticket } from "lucide-react";
+import { Building2, LayoutGrid, LogOut, MapPinned, Settings, Ticket } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AppSession } from "@/app/lib/auth/session";
@@ -47,7 +47,7 @@ export default function SuporteSidebar({ session }: { session: AppSession }) {
           <NavItem href="/suporte" icon={LayoutGrid} label="Dashboard Suporte" />
           <NavItem href="/suporte/fila-tickets" icon={Ticket} label="Fila de Tickets" />
           <NavItem href="/suporte/status-postos" icon={MapPinned} label="Status dos Postos" />
-          <NavItem href="/suporte/consulta-clientes" icon={Users} label="Consulta Clientes" />
+          <NavItem href="/suporte/consulta-clientes" icon={Building2} label="Empresas & Frotas" />
         </nav>
 
         <div className="mt-8 px-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">

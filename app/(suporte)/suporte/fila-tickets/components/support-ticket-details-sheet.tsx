@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { CalendarDays, FileText, User } from "lucide-react";
+import { Building2, CalendarDays, FileText, User, UserCheck, Zap } from "lucide-react";
 import { TicketChat } from "@/components/tickets/ticket-chat";
 
 import type { Ticket, TicketStatus } from "@/app/(client)/meus-pedidos/lib/mock-tickets";
@@ -103,10 +103,31 @@ export default function SupportTicketDetailsSheet({
                     </>,
                   )}
                   {row(
+                    "Frota / Empresa",
+                    <>
+                      <Building2 className="h-5 w-5 text-zinc-400" />
+                      <span className="font-extrabold text-zinc-900">
+                        {ticket.fleet || "—"}
+                      </span>
+                    </>,
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  {row(
                     "Data Criação",
                     <>
                       <CalendarDays className="h-5 w-5 text-zinc-400" />
                       <span className="font-extrabold text-zinc-900">{ticket.createdAt}</span>
+                    </>,
+                  )}
+                  {row(
+                    "Responsável",
+                    <>
+                      <UserCheck className="h-5 w-5 text-zinc-400" />
+                      <span className="font-extrabold text-zinc-900">
+                        {ticket.assignedTo || "Não atribuído"}
+                      </span>
                     </>,
                   )}
                 </div>
@@ -123,12 +144,6 @@ export default function SupportTicketDetailsSheet({
                   <div className="text-sm font-extrabold text-zinc-900">Dados Operacionais</div>
                   <div className="mt-4 grid grid-cols-2 gap-4">
                     <div className="rounded-2xl border border-zinc-100 bg-zinc-50/40 p-4">
-                      <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">Viatura</div>
-                      <div className="mt-2 inline-flex rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-extrabold text-zinc-700">
-                        {ticket.matricula ?? "N/A"}
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-zinc-100 bg-zinc-50/40 p-4">
                       <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">Tipo</div>
                       <div className="mt-2 text-sm font-extrabold text-zinc-800">
                         {ticket.requestTypeLabel ?? ticket.type}
@@ -137,6 +152,13 @@ export default function SupportTicketDetailsSheet({
                     <div className="rounded-2xl border border-zinc-100 bg-zinc-50/40 p-4">
                       <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">Prioridade</div>
                       <div className="mt-2 text-sm font-extrabold text-zinc-800">{ticket.priority}</div>
+                    </div>
+                    <div className="rounded-2xl border border-zinc-100 bg-zinc-50/40 p-4">
+                      <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">Impacto</div>
+                      <div className="mt-2 flex items-center gap-2 text-sm font-extrabold text-zinc-800">
+                        <Zap className="h-4 w-4 text-amber-500" />
+                        {ticket.impact || "—"}
+                      </div>
                     </div>
                     <div className="rounded-2xl border border-zinc-100 bg-zinc-50/40 p-4">
                       <div className="text-[11px] font-extrabold uppercase tracking-widest text-zinc-400">Canal</div>

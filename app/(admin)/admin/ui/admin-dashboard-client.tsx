@@ -35,7 +35,7 @@ export default function AdminDashboardClient() {
         </div>
         <div className="rounded-2xl border border-zinc-100/60 bg-white p-6 shadow-[0_4px_20px_rgb(0,0,0,0.01)]">
           <div className="flex items-center gap-2 text-sm font-extrabold text-zinc-900"><Users className="h-5 w-5 text-emerald-600" />Gestão de Utilizadores</div>
-          <div className="mt-2 text-xs font-semibold text-zinc-500">Cria administradores, suporte técnico e gestores de frota.</div>
+          <div className="mt-2 text-xs font-semibold text-zinc-500">Cria administradores, suporte técnico, gestores e colaboradores.</div>
           <div className="mt-5"><Button className="h-10 rounded-xl bg-emerald-600 px-6 text-sm font-semibold hover:bg-emerald-700"><UserPlus className="mr-2 h-4 w-4" />Novo Utilizador</Button></div>
         </div>
       </div>

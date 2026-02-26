@@ -11,7 +11,7 @@ const TITLE_BY_PATH: Record<string, string> = {
   "/suporte": "Dashboard Suporte",
   "/suporte/fila-tickets": "Fila de Tickets",
   "/suporte/status-postos": "Status dos Postos",
-  "/suporte/consulta-clientes": "Consulta Clientes",
+  "/suporte/consulta-clientes": "Empresas & Frotas",
   "/suporte/configuracoes": "Configurações",
 };
 
