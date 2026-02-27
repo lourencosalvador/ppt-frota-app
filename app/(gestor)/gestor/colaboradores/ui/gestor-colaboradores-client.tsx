@@ -101,26 +101,38 @@ export default function GestorColaboradoresClient() {
 
       {/* Invite Dialog */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-        <DialogContent className="max-w-lg rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg font-extrabold text-zinc-900">
-              <UserPlus className="h-5 w-5 text-emerald-600" />
+        <DialogContent className="max-w-md gap-0 overflow-hidden rounded-2xl p-0">
+          <DialogHeader className="px-6 pt-6 pb-0">
+            <DialogTitle className="flex items-center gap-2.5 text-lg font-extrabold text-zinc-900">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50">
+                <UserPlus className="h-4.5 w-4.5 text-emerald-600" />
+              </div>
               Convidar Colaborador
             </DialogTitle>
           </DialogHeader>
 
-          <div className="mt-2 space-y-4">
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
-              <div className="text-xs font-bold text-emerald-800">O que acontece?</div>
-              <ol className="mt-2 space-y-1 text-xs font-semibold text-emerald-700">
-                <li>1. O colaborador recebe um convite por email</li>
-                <li>2. Aceita o convite e cria a sua conta</li>
-                <li>3. Terá acesso simplificado: saldo do cartão e transações</li>
-              </ol>
+          <div className="space-y-5 px-6 pt-5 pb-6">
+            <div className="rounded-2xl border border-emerald-100/80 bg-emerald-50/40 px-4 py-3.5">
+              <div className="flex items-center gap-5 text-xs font-semibold text-emerald-700">
+                <span className="flex items-center gap-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-extrabold text-white">1</span>
+                  Recebe convite
+                </span>
+                <span className="text-emerald-300">→</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-extrabold text-white">2</span>
+                  Cria conta
+                </span>
+                <span className="text-emerald-300">→</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-extrabold text-white">3</span>
+                  Acesso activo
+                </span>
+              </div>
             </div>
 
-            <div>
-              <label className="mb-1.5 block text-xs font-bold text-zinc-600">Nome do Colaborador</label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-extrabold text-zinc-600">Nome do Colaborador</label>
               <Input
                 value={colabName}
                 onChange={(e) => setColabName(e.target.value)}
@@ -128,8 +140,9 @@ export default function GestorColaboradoresClient() {
                 className="h-11 rounded-xl"
               />
             </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-bold text-zinc-600">Email</label>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-extrabold text-zinc-600">Email</label>
               <Input
                 type="email"
                 value={colabEmail}
@@ -139,11 +152,18 @@ export default function GestorColaboradoresClient() {
               />
             </div>
 
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" onClick={() => setInviteOpen(false)} className="h-10 rounded-xl">
+            <div className="flex gap-3 pt-1">
+              <Button
+                variant="outline"
+                onClick={() => setInviteOpen(false)}
+                className="h-11 flex-1 rounded-xl font-extrabold"
+              >
                 Cancelar
               </Button>
-              <Button onClick={handleInvite} className="h-10 rounded-xl bg-emerald-600 px-6 hover:bg-emerald-700">
+              <Button
+                onClick={handleInvite}
+                className="h-11 flex-1 rounded-xl bg-emerald-600 font-extrabold hover:bg-emerald-700"
+              >
                 <Mail className="mr-2 h-4 w-4" />
                 Enviar Convite
               </Button>
